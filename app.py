@@ -9,17 +9,18 @@ Flask + SocketIO backend that:
 
 from flask import Flask, request, jsonify, render_template
 from flask_socketio import SocketIO
-from feature_extractor import FlowFeatureExtractor
-from trust_engine import TrustEngine
-import time, json
+from core import FlowFeatureExtractor, TrustEngine
+import time, json, os
 
 # ── App setup ───────────────────────────────────────────────────────────
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
 app = Flask(__name__)
 app.config["SECRET_KEY"] = "bazta-iot-2026"
 socketio = SocketIO(app, cors_allowed_origins="*", async_mode="threading")
 
 extractor = FlowFeatureExtractor(window_sec=30)
-engine    = TrustEngine(model_path="if_model.pkl")
+engine    = TrustEngine(model_path=os.path.join(BASE_DIR, "models", "if_model.pkl"))
 
 # Track recent events for the dashboard feed (ring buffer)
 _event_log = []
