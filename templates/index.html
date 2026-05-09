@@ -57,85 +57,26 @@
             <!-- Network Topology -->
             <div class="topology-panel glass-card">
                 <div class="panel-title"><span class="icon">🌐</span> Network Topology</div>
-                <svg class="topology-svg" id="topo-svg" viewBox="0 0 520 340">
-                    <!-- Links -->
-                    <g id="topo-links">
-                        <!-- Core to segments -->
-                        <line class="topo-link" x1="260" y1="60" x2="100" y2="160" id="link-s0-s1"/>
-                        <line class="topo-link" x1="260" y1="60" x2="260" y2="160" id="link-s0-s2"/>
-                        <line class="topo-link" x1="260" y1="60" x2="420" y2="160" id="link-s0-s3"/>
-                        <!-- Segment 1 to hosts -->
-                        <line class="topo-link" x1="100" y1="160" x2="55"  y2="270" id="link-s1-h1"/>
-                        <line class="topo-link" x1="100" y1="160" x2="145" y2="270" id="link-s1-h2"/>
-                        <!-- Segment 2 to hosts -->
-                        <line class="topo-link" x1="260" y1="160" x2="215" y2="270" id="link-s2-h3"/>
-                        <line class="topo-link" x1="260" y1="160" x2="305" y2="270" id="link-s2-h4"/>
-                        <!-- Segment 3 to hosts -->
-                        <line class="topo-link" x1="420" y1="160" x2="375" y2="270" id="link-s3-h5"/>
-                        <line class="topo-link" x1="420" y1="160" x2="465" y2="270" id="link-s3-h6"/>
+                <svg class="topology-svg" id="topo-svg" viewBox="0 0 520 380">
+                    <!-- Core Switch (always visible) -->
+                    <g class="topo-node" id="node-core">
+                        <rect x="238" y="20" width="44" height="44" rx="8"
+                              fill="rgba(108,124,255,0.2)" stroke="var(--accent-blue)" stroke-width="1.5"/>
+                        <text x="260" y="44" fill="var(--text-primary)"
+                              font-size="11" font-weight="600" text-anchor="middle">SDN</text>
+                        <text x="260" y="76" fill="var(--text-muted)"
+                              font-size="9" text-anchor="middle">CONTROLLER</text>
                     </g>
-                    <!-- Nodes -->
-                    <g id="topo-nodes">
-                        <!-- Core Switch -->
-                        <g class="topo-node" id="node-s0">
-                            <rect x="238" y="38" width="44" height="44" rx="8"
-                                  fill="rgba(108,124,255,0.2)" stroke="var(--accent-blue)" stroke-width="1.5"/>
-                            <text x="260" y="62" fill="var(--text-primary)"
-                                  font-size="11" font-weight="600">s0</text>
-                            <text class="node-label" x="260" y="90">CORE</text>
-                        </g>
-                        <!-- Segment Switches -->
-                        <g class="topo-node" id="node-s1">
-                            <rect x="78" y="138" width="44" height="44" rx="8"
-                                  fill="rgba(108,124,255,0.15)" stroke="var(--accent-blue)" stroke-width="1"/>
-                            <text x="100" y="162" fill="var(--text-primary)" font-size="10" font-weight="500">s1</text>
-                            <text class="node-label" x="100" y="190">SEG-A</text>
-                        </g>
-                        <g class="topo-node" id="node-s2">
-                            <rect x="238" y="138" width="44" height="44" rx="8"
-                                  fill="rgba(108,124,255,0.15)" stroke="var(--accent-blue)" stroke-width="1"/>
-                            <text x="260" y="162" fill="var(--text-primary)" font-size="10" font-weight="500">s2</text>
-                            <text class="node-label" x="260" y="190">SEG-B</text>
-                        </g>
-                        <g class="topo-node" id="node-s3">
-                            <rect x="398" y="138" width="44" height="44" rx="8"
-                                  fill="rgba(108,124,255,0.15)" stroke="var(--accent-blue)" stroke-width="1"/>
-                            <text x="420" y="162" fill="var(--text-primary)" font-size="10" font-weight="500">s3</text>
-                            <text class="node-label" x="420" y="190">SEG-C</text>
-                        </g>
-                        <!-- Host Nodes -->
-                        <g class="topo-node" id="node-h1">
-                            <circle cx="55" cy="270" r="18" class="node-idle"/>
-                            <text x="55" y="273">h1</text>
-                            <text class="node-label" x="55" y="296">10.0.1.1</text>
-                        </g>
-                        <g class="topo-node" id="node-h2">
-                            <circle cx="145" cy="270" r="18" class="node-idle"/>
-                            <text x="145" y="273">h2</text>
-                            <text class="node-label" x="145" y="296">10.0.1.2</text>
-                        </g>
-                        <g class="topo-node" id="node-h3">
-                            <circle cx="215" cy="270" r="18" class="node-idle"/>
-                            <text x="215" y="273">h3</text>
-                            <text class="node-label" x="215" y="296">10.0.2.1</text>
-                        </g>
-                        <g class="topo-node" id="node-h4">
-                            <circle cx="305" cy="270" r="18" class="node-idle"/>
-                            <text x="305" y="273">h4</text>
-                            <text class="node-label" x="305" y="296">10.0.2.2</text>
-                        </g>
-                        <g class="topo-node" id="node-h5">
-                            <circle cx="375" cy="270" r="18" class="node-idle"/>
-                            <text x="375" y="273">h5</text>
-                            <text class="node-label" x="375" y="296">10.0.3.1</text>
-                        </g>
-                        <g class="topo-node" id="node-h6">
-                            <circle cx="465" cy="270" r="18" class="node-idle"/>
-                            <text x="465" y="273">h6</text>
-                            <text class="node-label" x="465" y="296">10.0.3.2</text>
-                        </g>
-                    </g>
+                    <!-- Dynamic links drawn by JS -->
+                    <g id="topo-links"></g>
+                    <!-- Dynamic host nodes drawn by JS -->
+                    <g id="topo-hosts"></g>
                 </svg>
+                <div class="topo-legend" style="display:flex;gap:12px;padding:6px 12px;font-size:0.7rem;color:var(--text-muted)">
+                    <span><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:var(--safe);margin-right:4px"></span>Safe (≥70)</span>
+                    <span><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:var(--warning);margin-right:4px"></span>Rate Limited</span>
+                    <span><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:var(--danger);margin-right:4px"></span>Blocked (<30)</span>
+                </div>
             </div>
 
             <!-- Trust Scores -->
@@ -186,6 +127,31 @@
                 </div>
             </div>
         </div>
+
+        <!-- ═══ Model Performance Comparison ═══ -->
+        <div class="model-section glass-card" id="model-section">
+            <div class="panel-title"><span class="icon">🤖</span> ML Model Performance Comparison</div>
+            <div class="model-active" id="model-active">
+                <span class="model-badge">Active Model: Loading...</span>
+            </div>
+            <div class="model-table-wrap">
+                <table class="model-table" id="model-table">
+                    <thead>
+                        <tr>
+                            <th>Model</th>
+                            <th>Type</th>
+                            <th>Accuracy</th>
+                            <th>Precision</th>
+                            <th>Recall</th>
+                            <th>F1 Score</th>
+                        </tr>
+                    </thead>
+                    <tbody id="model-tbody">
+                        <tr><td colspan="6" style="text-align:center;color:var(--text-muted)">Loading model data…</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
     </div>
 
     <script>
@@ -196,16 +162,8 @@
     const socket = io();
     const CIRC = 2 * Math.PI * 17;      // gauge ring circumference (r=17)
 
-    // IP → host node mapping for topology
-    const IP_MAP = {
-        '10.0.1.1': 'h1', '10.0.1.2': 'h2',
-        '10.0.2.1': 'h3', '10.0.2.2': 'h4',
-        '10.0.3.1': 'h5', '10.0.3.2': 'h6',
-        // Also handle the original flat IPs from flow.txt
-        '10.0.0.1': 'h1', '10.0.0.2': 'h2',
-        '10.0.0.3': 'h3', '10.0.0.4': 'h4',
-        '10.0.0.5': 'h5', '10.0.0.6': 'h6',
-    };
+    // Dynamic topology — hosts are rendered from actual trust scores
+    let knownHosts = new Set();  // all IPs seen so far
 
     // State
     let trustScores = {};        // ip → {score, action, triggered}
@@ -231,12 +189,33 @@
         if (data.scores) {
             Object.entries(data.scores).forEach(([ip, score]) => {
                 trustScores[ip] = { score, action: scoreToAction(score), triggered: [] };
+                knownHosts.add(ip);
             });
             renderTrustList();
+            renderTopology();
         }
-        if (data.stats) updateStats(data.stats);
+        if (data.stats) {
+            // Enrich stats with client-side computed values if missing
+            if (!data.stats.active_hosts) data.stats.active_hosts = Object.keys(trustScores).length;
+            if (data.stats.avg_score === undefined) {
+                const scores = Object.values(trustScores).map(t => t.score);
+                data.stats.avg_score = scores.length ? Math.round(scores.reduce((a,b) => a+b, 0) / scores.length * 10) / 10 : '—';
+            }
+            updateStats(data.stats);
+            // Sync flow counter
+            if (data.stats.total_flows) {
+                totalFlows = data.stats.total_flows;
+                document.getElementById('flow-counter').textContent = totalFlows + ' flows';
+            }
+        }
         if (data.events) {
-            data.events.forEach(ev => addFeedItem(ev, false));
+            data.events.forEach(ev => {
+                addFeedItem(ev, false);
+                addChartPoint(ev);  // populate chart from history
+                if (ev.src_ip) knownHosts.add(ev.src_ip);
+                if (ev.dst_ip) knownHosts.add(ev.dst_ip);
+            });
+            renderTopology();
         }
     });
 
@@ -253,12 +232,15 @@
         };
         renderTrustList();
 
-        // Update topology nodes
-        updateTopoNode(ev.src_ip, ev.score, ev.action);
-        if (ev.dst_ip) updateTopoNode(ev.dst_ip, null, null);
+        // Track hosts and update topology
+        let newHost = false;
+        if (ev.src_ip && !knownHosts.has(ev.src_ip)) { knownHosts.add(ev.src_ip); newHost = true; }
+        if (ev.dst_ip && !knownHosts.has(ev.dst_ip)) { knownHosts.add(ev.dst_ip); newHost = true; }
+        if (newHost) renderTopology();
+        else updateTopoNodeColor(ev.src_ip, ev.score);
 
-        // Activate link between src and dst
-        activateLink(ev.src_ip, ev.dst_ip);
+        // Pulse the active link
+        pulseTopoLink(ev.src_ip);
 
         // Add to feed if triggered
         if (ev.triggered && ev.triggered.length > 0) {
@@ -269,7 +251,7 @@
         addChartPoint(ev);
 
         // Update stats periodically
-        if (totalFlows % 5 === 0) fetchStats();
+        if (totalFlows % 3 === 0) fetchStats();
     });
 
     // ── Block events ───────────────────────────────────────────
@@ -339,69 +321,109 @@
         }).join('');
     }
 
-    // ── Update topology node color ─────────────────────────────
-    function updateTopoNode(ip, score, action) {
-        const hostId = IP_MAP[ip];
-        if (!hostId) return;
+    // ── Dynamic topology rendering ──────────────────────────────
+    function renderTopology() {
+        const linksG = document.getElementById('topo-links');
+        const hostsG = document.getElementById('topo-hosts');
+        linksG.innerHTML = '';
+        hostsG.innerHTML = '';
 
-        const node = document.getElementById('node-' + hostId);
-        if (!node) return;
+        // Separate benign (10.x) and external (192.x, etc.) hosts
+        const allIps = Array.from(knownHosts).filter(ip => ip && ip !== '');
+        const benignIps = allIps.filter(ip => ip.startsWith('10.')).sort();
+        const attackIps = allIps.filter(ip => !ip.startsWith('10.')).sort();
 
-        const circle = node.querySelector('circle');
-        if (!circle) return;
+        // Layout: benign hosts on left, attack hosts on right
+        // Core switch at top center (260, 42)
+        const coreX = 260, coreY = 42;
 
-        if (score === null) {
-            // Just mark as active
-            if (circle.classList.contains('node-idle')) {
-                circle.classList.remove('node-idle');
-                circle.classList.add('node-safe');
-            }
-            return;
+        // Two sub-switches for grouping
+        const sw1X = 140, sw1Y = 130;  // Internal network switch
+        const sw2X = 380, sw2Y = 130;  // External network switch
+
+        // Draw sub-switches
+        if (benignIps.length > 0) {
+            linksG.innerHTML += `<line class="topo-link" x1="${coreX}" y1="${coreY + 22}" x2="${sw1X}" y2="${sw1Y}" />`;
+            hostsG.innerHTML += `
+                <g class="topo-node">
+                    <rect x="${sw1X-22}" y="${sw1Y-22}" width="44" height="44" rx="8"
+                          fill="rgba(0,255,136,0.1)" stroke="var(--accent-green)" stroke-width="1"/>
+                    <text x="${sw1X}" y="${sw1Y+3}" fill="var(--text-primary)" font-size="9" font-weight="500" text-anchor="middle">SW1</text>
+                    <text x="${sw1X}" y="${sw1Y+32}" fill="var(--text-muted)" font-size="8" text-anchor="middle">INTERNAL</text>
+                </g>`;
+        }
+        if (attackIps.length > 0) {
+            linksG.innerHTML += `<line class="topo-link" x1="${coreX}" y1="${coreY + 22}" x2="${sw2X}" y2="${sw2Y}" />`;
+            hostsG.innerHTML += `
+                <g class="topo-node">
+                    <rect x="${sw2X-22}" y="${sw2Y-22}" width="44" height="44" rx="8"
+                          fill="rgba(255,68,102,0.1)" stroke="var(--accent-red)" stroke-width="1"/>
+                    <text x="${sw2X}" y="${sw2Y+3}" fill="var(--text-primary)" font-size="9" font-weight="500" text-anchor="middle">SW2</text>
+                    <text x="${sw2X}" y="${sw2Y+32}" fill="var(--text-muted)" font-size="8" text-anchor="middle">EXTERNAL</text>
+                </g>`;
         }
 
+        // Render benign host nodes
+        const hostY = 260;
+        const renderHosts = (ips, switchX, switchY, startX, spacing) => {
+            const totalWidth = (ips.length - 1) * spacing;
+            const offsetX = startX - totalWidth / 2;
+            ips.forEach((ip, i) => {
+                const x = offsetX + i * spacing;
+                const score = trustScores[ip] ? trustScores[ip].score : 95;
+                const cls = score >= 70 ? 'node-safe' : score >= 30 ? 'node-warning' : 'node-danger';
+                const shortIp = ip.replace(/^10\.0\.0\./, '...');
+
+                // Link from switch to host
+                linksG.innerHTML += `<line class="topo-link" x1="${switchX}" y1="${switchY}" x2="${x}" y2="${hostY}" id="link-${ip}" />`;
+
+                // Host circle
+                hostsG.innerHTML += `
+                    <g class="topo-node" id="topo-host-${ip.replace(/\./g, '-')}">
+                        <circle cx="${x}" cy="${hostY}" r="16" class="${cls}" />
+                        <text x="${x}" y="${hostY + 4}" fill="var(--text-primary)" font-size="8" font-weight="500" text-anchor="middle">
+                            ${ip.split('.').slice(-1)[0]}
+                        </text>
+                        <text x="${x}" y="${hostY + 30}" fill="var(--text-muted)" font-size="7" text-anchor="middle">${ip}</text>
+                        <text x="${x}" y="${hostY + 42}" fill="${scoreColor(score)}" font-size="8" font-weight="600" text-anchor="middle">${Math.round(score)}</text>
+                    </g>`;
+            });
+        };
+
+        if (benignIps.length > 0) renderHosts(benignIps, sw1X, sw1Y, sw1X, Math.min(65, 260 / Math.max(benignIps.length, 1)));
+        if (attackIps.length > 0) renderHosts(attackIps, sw2X, sw2Y, sw2X, Math.min(65, 260 / Math.max(attackIps.length, 1)));
+
+        // If no hosts at all, show placeholder
+        if (allIps.length === 0) {
+            hostsG.innerHTML = `<text x="260" y="200" fill="var(--text-muted)" font-size="12" text-anchor="middle">Waiting for network flows…</text>`;
+        }
+    }
+
+    function updateTopoNodeColor(ip, score) {
+        const nodeId = 'topo-host-' + ip.replace(/\./g, '-');
+        const node = document.getElementById(nodeId);
+        if (!node) return;
+        const circle = node.querySelector('circle');
+        if (!circle) return;
         circle.classList.remove('node-idle', 'node-safe', 'node-warning', 'node-danger');
         if (score >= 70) circle.classList.add('node-safe');
         else if (score >= 30) circle.classList.add('node-warning');
         else circle.classList.add('node-danger');
     }
 
+    function pulseTopoLink(ip) {
+        const link = document.getElementById('link-' + ip);
+        if (!link) return;
+        link.classList.add('active');
+        setTimeout(() => link.classList.remove('active'), 800);
+    }
+
     function flashNode(ip) {
-        const hostId = IP_MAP[ip];
-        if (!hostId) return;
-        const node = document.getElementById('node-' + hostId);
+        const nodeId = 'topo-host-' + ip.replace(/\./g, '-');
+        const node = document.getElementById(nodeId);
         if (!node) return;
         node.style.transform = 'scale(1.3)';
         setTimeout(() => node.style.transform = '', 500);
-    }
-
-    // ── Activate link on traffic ───────────────────────────────
-    function activateLink(srcIp, dstIp) {
-        // Deactivate all links first
-        document.querySelectorAll('.topo-link').forEach(l => l.classList.remove('active'));
-
-        const srcHost = IP_MAP[srcIp];
-        const dstHost = IP_MAP[dstIp];
-        if (!srcHost || !dstHost) return;
-
-        // Find segment for each host
-        const seg = h => {
-            const n = parseInt(h.replace('h', ''));
-            return 's' + Math.ceil(n / 2);
-        };
-        const srcSeg = seg(srcHost);
-        const dstSeg = seg(dstHost);
-
-        // Activate host-to-segment links
-        const l1 = document.getElementById(`link-${srcSeg}-${srcHost}`);
-        const l2 = document.getElementById(`link-${dstSeg}-${dstHost}`);
-        if (l1) l1.classList.add('active');
-        if (l2) l2.classList.add('active');
-
-        // Activate segment-to-core links
-        const l3 = document.getElementById(`link-s0-${srcSeg}`);
-        const l4 = document.getElementById(`link-s0-${dstSeg}`);
-        if (l3) l3.classList.add('active');
-        if (l4) l4.classList.add('active');
     }
 
     // ── Attack feed ────────────────────────────────────────────
@@ -450,10 +472,17 @@
     }
 
     function updateStats(s) {
+        // Compute active hosts and avg score from client-side trust data
+        const hostCount = s.active_hosts || Object.keys(trustScores).length;
+        const scores = Object.values(trustScores).map(t => t.score);
+        const avgScore = s.avg_score !== undefined && s.avg_score !== '—'
+            ? s.avg_score
+            : (scores.length ? Math.round(scores.reduce((a,b) => a+b, 0) / scores.length * 10) / 10 : '—');
+
         updateStatsUI(
-            s.total_flows || 0,
-            s.active_hosts || 0,
-            s.avg_score !== undefined ? s.avg_score : '—',
+            s.total_flows || totalFlows,
+            hostCount,
+            avgScore,
             s.blocks || 0
         );
     }
@@ -561,6 +590,29 @@
 
     // Initial draw
     drawChart();
+
+    // ── Model Info ─────────────────────────────────────────────
+    fetch('/model_info').then(r => r.json()).then(info => {
+        const badge = document.getElementById('model-active');
+        const modelType = info.model_type || 'none';
+        const scaler = info.has_scaler ? '+ Scaler' : '';
+        const status = info.loaded ? '🟢' : '🔴';
+        badge.innerHTML = `<span class="model-badge">${status} Active: <strong>${modelType}</strong> ${scaler}</span>`;
+
+        if (info.comparison) {
+            const tbody = document.getElementById('model-tbody');
+            tbody.innerHTML = Object.values(info.comparison).map(m => `
+                <tr>
+                    <td class="model-name">${m.name}</td>
+                    <td><span class="model-type-tag">${m.type}</span></td>
+                    <td class="metric">${(m.accuracy * 100).toFixed(1)}%</td>
+                    <td class="metric">${(m.precision * 100).toFixed(1)}%</td>
+                    <td class="metric">${(m.recall * 100).toFixed(1)}%</td>
+                    <td class="metric">${(m.f1_score * 100).toFixed(1)}%</td>
+                </tr>
+            `).join('');
+        }
+    }).catch(() => {});
     </script>
 </body>
 </html>

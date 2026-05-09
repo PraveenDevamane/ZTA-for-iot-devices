@@ -1,4 +1,4 @@
-import pickle, os
+import pickle, os, json
 import numpy as np
 from sklearn.ensemble import IsolationForest
 
@@ -17,16 +17,75 @@ RULES = [
     ("byte_rate",    ">",  50000,"byte_flood",    -30),
 ]
 
+# Feature order for the ML model (must match training script)
+LIVE_FEATURES = ["pkt_rate", "byte_rate", "unique_ports", "port_entropy"]
+
+
 class TrustEngine:
-    def __init__(self, model_path="if_model.pkl"):
+    def __init__(self, model_path=None, models_dir=None):
         self._scores = {}           # {src_ip: float}
         self._model  = None
+        self._scaler = None
+        self._model_meta = None
         self._stats  = {"total_flows": 0, "blocks": 0, "rate_limits": 0,
                         "icmp_flood": 0, "port_scan": 0,
                         "high_entropy": 0, "byte_flood": 0, "ml_anomaly": 0}
-        if os.path.exists(model_path):
-            with open(model_path, "rb") as f:
-                self._model = pickle.load(f)
+
+        # Determine models directory
+        if models_dir is None:
+            models_dir = os.path.join(os.path.dirname(os.path.dirname(
+                os.path.abspath(__file__))), "models")
+
+        # Load the live model pipeline (scaler + model)
+        self._load_model_pipeline(models_dir, model_path)
+
+    def _load_model_pipeline(self, models_dir, legacy_model_path=None):
+        """
+        Load model in order of preference:
+          1. Live pipeline: live_scaler.pkl + live_if_model.pkl (trained on 4 features)
+          2. Legacy: if_model.pkl (original, no scaler)
+        """
+        live_model_path = os.path.join(models_dir, "live_if_model.pkl")
+        live_scaler_path = os.path.join(models_dir, "live_scaler.pkl")
+        live_meta_path = os.path.join(models_dir, "live_model_meta.json")
+
+        # Try live pipeline first
+        if os.path.exists(live_model_path) and os.path.exists(live_scaler_path):
+            try:
+                import joblib
+                self._model = joblib.load(live_model_path)
+                self._scaler = joblib.load(live_scaler_path)
+                if os.path.exists(live_meta_path):
+                    with open(live_meta_path) as f:
+                        self._model_meta = json.load(f)
+                print(f"[TrustEngine] Loaded live pipeline: {live_model_path}")
+                print(f"[TrustEngine] Scaler loaded: {live_scaler_path}")
+                return
+            except Exception as e:
+                print(f"[TrustEngine] Warning: Failed to load live pipeline: {e}")
+
+        # Fallback to legacy model
+        if legacy_model_path and os.path.exists(legacy_model_path):
+            try:
+                with open(legacy_model_path, "rb") as f:
+                    self._model = pickle.load(f)
+                print(f"[TrustEngine] Loaded legacy model: {legacy_model_path}")
+                return
+            except Exception as e:
+                print(f"[TrustEngine] Warning: Failed to load legacy model: {e}")
+
+        # Also try default legacy path
+        legacy_default = os.path.join(models_dir, "if_model.pkl")
+        if os.path.exists(legacy_default):
+            try:
+                with open(legacy_default, "rb") as f:
+                    self._model = pickle.load(f)
+                print(f"[TrustEngine] Loaded legacy model: {legacy_default}")
+                return
+            except Exception as e:
+                print(f"[TrustEngine] Warning: Failed to load model: {e}")
+
+        print("[TrustEngine] No ML model loaded — using rule-based detection only")
 
     # ── offline training (run once on your InSDN dataset) ──────────────
     @staticmethod
@@ -76,6 +135,11 @@ class TrustEngine:
                 features["unique_ports"],
                 features["port_entropy"],
             ]])
+
+            # Apply scaler if available (live pipeline)
+            if self._scaler is not None:
+                vec = self._scaler.transform(vec)
+
             # decision_function: negative = anomalous, positive = normal
             ml_score = self._model.decision_function(vec)[0]
             if ml_score < -0.1:
@@ -115,6 +179,29 @@ class TrustEngine:
     def get_stats(self) -> dict:
         """Return detection statistics for the dashboard."""
         return dict(self._stats)
+
+    def get_model_info(self) -> dict:
+        """Return info about the loaded ML model for the dashboard."""
+        if self._model_meta:
+            return {
+                "model_type": self._model_meta.get("model_type", "IsolationForest"),
+                "features": self._model_meta.get("live_feature_names", LIVE_FEATURES),
+                "accuracy": self._model_meta.get("accuracy", 0),
+                "precision": self._model_meta.get("precision", 0),
+                "recall": self._model_meta.get("recall", 0),
+                "f1_score": self._model_meta.get("f1_score", 0),
+                "training_samples": self._model_meta.get("training_samples", 0),
+                "dataset": self._model_meta.get("dataset", "unknown"),
+                "has_scaler": self._scaler is not None,
+                "loaded": True,
+            }
+        return {
+            "model_type": "IsolationForest" if self._model else "none",
+            "features": LIVE_FEATURES,
+            "has_scaler": self._scaler is not None,
+            "loaded": self._model is not None,
+            "legacy": True,
+        }
 
     @staticmethod
     def _action(score: float) -> str:

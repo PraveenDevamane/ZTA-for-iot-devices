@@ -1,4 +1,13 @@
-flask>=3.0
-flask-socketio>=5.0
-numpy
-scikit-learn
+# BAZTA — Dashboard + Trust Engine Dependencies
+# Install: pip install -r requirements.txt
+# Compatible with Python 3.8 - 3.13
+
+flask==3.1.3
+flask-socketio==5.6.1
+numpy==2.4.4
+scikit-learn==1.8.0
+joblib==1.5.3
+pandas==3.0.2
+
+# Note: SDN controller dependencies are separate (see sdn/requirements-sdn.txt)
+# They must be installed on the Linux/Mininet VM only.

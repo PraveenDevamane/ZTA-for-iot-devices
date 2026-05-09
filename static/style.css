@@ -625,6 +625,85 @@ body::before {
     opacity: 0.3;
 }
 
+/* ── Model Comparison Section ──────────────────────────────── */
+.model-section {
+    padding: 24px;
+    margin-top: 24px;
+}
+
+.model-active {
+    margin-bottom: 16px;
+}
+
+.model-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 16px;
+    border-radius: 20px;
+    font-size: 0.8rem;
+    background: rgba(108, 124, 255, 0.08);
+    border: 1px solid rgba(108, 124, 255, 0.2);
+    color: var(--accent-cyan);
+}
+
+.model-badge strong {
+    color: var(--text-primary);
+}
+
+.model-table-wrap {
+    overflow-x: auto;
+}
+
+.model-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.82rem;
+}
+
+.model-table thead th {
+    text-align: left;
+    padding: 10px 14px;
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-secondary);
+    border-bottom: 1px solid var(--border-glass);
+    font-weight: 600;
+}
+
+.model-table tbody td {
+    padding: 12px 14px;
+    border-bottom: 1px solid rgba(100, 120, 255, 0.05);
+    color: var(--text-primary);
+}
+
+.model-table tbody tr:hover {
+    background: rgba(108, 124, 255, 0.04);
+}
+
+.model-name {
+    font-weight: 600;
+    color: var(--accent-cyan) !important;
+}
+
+.model-type-tag {
+    padding: 3px 10px;
+    border-radius: 10px;
+    font-size: 0.65rem;
+    font-weight: 500;
+    background: rgba(168, 85, 247, 0.1);
+    color: var(--accent-purple);
+    border: 1px solid rgba(168, 85, 247, 0.15);
+    white-space: nowrap;
+}
+
+.metric {
+    font-family: 'JetBrains Mono', monospace;
+    font-weight: 500;
+    font-size: 0.82rem;
+}
+
 /* ── Responsive ────────────────────────────────────────────── */
 @media (max-width: 1024px) {
     .stats-row { grid-template-columns: repeat(2, 1fr); }

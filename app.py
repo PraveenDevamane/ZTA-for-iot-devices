@@ -20,7 +20,7 @@ app.config["SECRET_KEY"] = "bazta-iot-2026"
 socketio = SocketIO(app, cors_allowed_origins="*", async_mode="threading")
 
 extractor = FlowFeatureExtractor(window_sec=30)
-engine    = TrustEngine(model_path=os.path.join(BASE_DIR, "models", "if_model.pkl"))
+engine    = TrustEngine(models_dir=os.path.join(BASE_DIR, "models"))
 
 # Track recent events for the dashboard feed (ring buffer)
 _event_log = []
@@ -102,6 +102,45 @@ def events():
     return jsonify(_event_log[-50:])
 
 
+@app.route("/model_info", methods=["GET"])
+def model_info():
+    """Return info about the loaded ML model and all model comparison data."""
+    info = engine.get_model_info()
+
+    # Add comparison data — trained on CICIoT2023 (WATAI) dataset
+    # Metrics below are placeholders; update after running train_model.ipynb
+    info["comparison"] = {
+        "isolation_forest": {
+            "name": "Isolation Forest",
+            "accuracy": info.get("accuracy", 0),
+            "precision": info.get("precision", 0),
+            "recall": info.get("recall", 0),
+            "f1_score": info.get("f1_score", 0),
+            "type": "Unsupervised",
+            "description": "Tree-based anomaly detection on CICIoT2023, lightweight for IoT"
+        },
+        "logistic_regression_34": {
+            "name": "LogisticRegression (34 classes)",
+            "accuracy": 0.0,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1_score": 0.0,
+            "type": "Supervised",
+            "description": "Multi-class classification on CICIoT2023 (update after training)"
+        },
+        "logistic_regression_2": {
+            "name": "LogisticRegression (2 classes)",
+            "accuracy": 0.0,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1_score": 0.0,
+            "type": "Supervised",
+            "description": "Binary classification on CICIoT2023 (update after training)"
+        }
+    }
+    return jsonify(info)
+
+
 @app.route("/reset", methods=["POST"])
 def reset():
     """Reset all state for a fresh run."""
@@ -125,10 +164,18 @@ def on_connect():
 
 # ── Main ────────────────────────────────────────────────────────────────
 if __name__ == "__main__":
-    print("\n" + "="*60)
+    model_info_data = engine.get_model_info()
+    model_status = "✓ ML Model loaded" if model_info_data.get("loaded") else "✗ No ML model (rule-based only)"
+    scaler_status = "✓ Scaler loaded" if model_info_data.get("has_scaler") else "✗ No scaler"
+
+    print("\n" + "=" * 60)
     print("  BAZTA — Zero Trust IoT Security Dashboard")
-    print("  Dashboard:  http://0.0.0.0:5050")
-    print("  Trust API:  POST http://0.0.0.0:5050/score_flow")
-    print("="*60 + "\n")
+    print("=" * 60)
+    print(f"  Dashboard  :  http://0.0.0.0:5050")
+    print(f"  Trust API  :  POST http://0.0.0.0:5050/score_flow")
+    print(f"  Model Info :  GET  http://0.0.0.0:5050/model_info")
+    print(f"  {model_status}")
+    print(f"  {scaler_status}")
+    print("=" * 60 + "\n")
     socketio.run(app, host="0.0.0.0", port=5050, debug=False,
                  allow_unsafe_werkzeug=True)

@@ -1,0 +1,12 @@
+# BAZTA — SDN Controller Dependencies (Linux/Mininet VM only)
+#
+# IMPORTANT: Run these commands in order:
+#   pip install "setuptools<74"
+#   pip install -r requirements-sdn.txt
+#
+# ryu requires older setuptools + eventlet to work on Python 3.10
+
+setuptools<74
+eventlet==0.30.2
+ryu==4.34
+requests==2.33.1
