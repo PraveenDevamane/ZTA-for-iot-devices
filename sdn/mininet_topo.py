@@ -34,7 +34,7 @@ def run():
     net  = Mininet(
         topo=topo,
         switch=OVSKernelSwitch,
-        controller=RemoteController("c0", ip="127.0.0.1", port=6633),
+        controller=RemoteController("c0", ip="127.0.0.1", port=6653),
         autoSetMacs=True
     )
     net.start()

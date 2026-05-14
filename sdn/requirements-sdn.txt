@@ -1,12 +1,7 @@
-# BAZTA — SDN Controller Dependencies (Linux/Mininet VM only)
+# BAZTA — SDN Controller Dependencies (Deprecated)
 #
-# IMPORTANT: Run these commands in order:
-#   pip install "setuptools<74"
-#   pip install -r requirements-sdn.txt
-#
-# ryu requires older setuptools + eventlet to work on Python 3.10
+# Note: The Python-based SDN controller (Ryu/OS-Ken) has been replaced by the Java-based ONOS controller.
+# You no longer need to install these Python packages.
 
-setuptools<74
-eventlet==0.30.2
-ryu==4.34
-requests==2.33.1
+# requests>=2.33.1 (Kept for historical reference if building external python scripts)
+requests>=2.33.1

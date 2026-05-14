@@ -16,7 +16,7 @@ IoT Devices (h1–h6)
 └──────┬───────┘
        │  OpenFlow
 ┌──────┴───────────────┐
-│   Ryu SDN Controller  │   Intercepts flows, installs block rules
+│   ONOS Controller     │   Intercepts flows, installs block rules (Java App)
 └──────┬───────────────┘
        │  REST API
 ┌──────┴───────────────────────┐
@@ -31,15 +31,16 @@ IoT Devices (h1–h6)
 
 ## Prerequisites
 
-- **OS:** Ubuntu 20.04 / 22.04 (required for Mininet + Ryu)
+- **OS:** Ubuntu 20.04 / 22.04 (required for Mininet + ONOS)
 - **Python:** 3.8 or higher
 - **System packages:** Mininet, Open vSwitch, hping3, nmap
+- **Java:** JDK 11 and Maven (required for building the ONOS Java application)
 
 Install system packages first:
 
 ```bash
 sudo apt update
-sudo apt install -y mininet openvswitch-switch hping3 nmap python3-pip
+sudo apt install -y mininet openvswitch-switch hping3 nmap python3-pip python3-venv openjdk-11-jdk maven
 ```
 
 ---
@@ -53,24 +54,41 @@ git clone https://github.com/PraveenDevamane/ZTA-for-iot-devices.git
 cd ZTA-for-iot-devices
 ```
 
-### Step 2 — Install Dashboard Dependencies
+### Step 2 — Create Virtual Environment and Install Dependencies
+
+Modern Linux distributions require using a virtual environment to avoid conflicts with system Python packages.
 
 ```bash
+# Create and activate a virtual environment
+python3 -m venv venv
+source venv/bin/activate
+
+# Install dashboard dependencies
 pip install -r requirements.txt
 ```
 
 This installs: Flask, Flask-SocketIO, NumPy, scikit-learn, joblib, pandas.
 
-### Step 3 — Install SDN Controller Dependencies (Ryu)
+### Step 3 — Install and Run ONOS
 
-> **Important:** Ryu requires an older version of setuptools. Run these commands **in this exact order:**
+Since we use the Java-based ONOS controller, you need to download ONOS and build our custom application:
 
 ```bash
-pip install "setuptools<74"
-pip install -r sdn/requirements-sdn.txt
-```
+# 1. Download and start ONOS 2.7.0 locally (in your home directory to avoid permission issues)
+cd ~
+wget https://repo1.maven.org/maven2/org/onosproject/onos-releases/2.7.0/onos-2.7.0.tar.gz
+tar -xzf onos-2.7.0.tar.gz
+cd onos-2.7.0
+bin/onos-service start &
 
-This installs: setuptools, eventlet 0.30.2, ryu 4.34, requests.
+# 2. Go back to your project folder and build our Java ONOS application
+cd /mnt/share/miniproject/sdn/bazta-onos-app
+mvn clean install
+
+# 3. Install the application into running ONOS
+~/onos-2.7.0/bin/onos-app localhost install! target/bazta-onos-app-1.0-SNAPSHOT.oar
+cd ../..
+```
 
 ### Step 4 — Extract ML Models & Verify Setup
 
@@ -99,6 +117,7 @@ If this prints `Setup OK`, everything is installed correctly.
 ### Terminal 1 — Start the Dashboard + Trust Engine
 
 ```bash
+source venv/bin/activate
 python app.py
 ```
 
@@ -117,11 +136,14 @@ You should see:
 
 Open **http://localhost:5050** in your browser to see the dashboard.
 
-### Terminal 2 — Start the Ryu SDN Controller
+### Terminal 2 — Start ONOS and the BAZTA App
 
+Ensure ONOS is running in Terminal 2:
 ```bash
-ryu-manager sdn/bazta_ryu_controller.py
+cd ~/onos-2.7.0
+bin/onos-service
 ```
+Our installed `bazta-onos-app` will automatically start processing packets and talking to the Trust API.
 
 ### Terminal 3 — Start the Mininet Network
 
@@ -162,7 +184,7 @@ If you prefer a single command:
 bash setup.sh
 ```
 
-This installs dependencies and verifies the setup automatically. You still need to install Ryu separately (Step 3).
+This installs dependencies and verifies the setup automatically. You still need to install ONOS and build the Java application separately (Step 3).
 
 ---
 
@@ -179,9 +201,9 @@ This installs dependencies and verifies the setup automatically. You still need 
 │   └── acc91.ipynb              # Kaggle notebook used for model training
 │
 ├── sdn/                         # SDN components
-│   ├── bazta_ryu_controller.py  # Ryu OpenFlow 1.3 controller
+│   ├── bazta-onos-app/          # ONOS Java application (Maven project)
 │   ├── mininet_topo.py          # Campus IoT network topology
-│   └── requirements-sdn.txt    # Ryu + eventlet dependencies
+│   └── requirements-sdn.txt     # (Deprecated) Old SDN Python dependencies
 │
 ├── models/                      # Trained ML models
 │   ├── live_if_model.pkl        # Live Isolation Forest (4 features)
@@ -231,21 +253,6 @@ The **live model** is deployed in `models/live_if_model.pkl` and evaluates 4 rea
 
 ## Troubleshooting
 
-### `ryu` installation fails with `get_script_args` error
-
-```bash
-# Fix: Install older setuptools FIRST
-pip install "setuptools<74"
-pip install ryu==4.34
-```
-
-### `eventlet.wsgi.ALREADY_HANDLED` error when running Ryu
-
-```bash
-# Fix: Use the pinned eventlet version
-pip install eventlet==0.30.2
-```
-
 ### `ModuleNotFoundError: No module named 'core'`
 
 Make sure you are running commands from the project root directory:
@@ -263,7 +270,7 @@ Make sure `app.py` is running in Terminal 1 before opening the browser.
 
 ## Tech Stack
 
-- **SDN Controller:** Ryu (OpenFlow 1.3)
+- **SDN Controller:** ONOS 2.7.0 (Java) + Custom OSGi App
 - **Virtual Network:** Mininet + Open vSwitch
 - **Trust Engine:** Python (rule-based + scikit-learn Isolation Forest)
 - **ML Models:** Isolation Forest
