@@ -24,3 +24,13 @@ Thumbs.db
 
 # Jupyter
 .ipynb_checkpoints/
+
+# Models and Data
+*.pkl
+*.joblib
+*.h5
+*.model
+*.zip
+models/*.zip
+models/*.pkl
+models/*.json
