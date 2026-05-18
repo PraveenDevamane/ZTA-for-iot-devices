@@ -9,6 +9,8 @@ set -e
 
 ACTION="${1:-help}"
 TARGET="${2:-10.0.0.2}"
+SCAN_PORTS="${SCAN_PORTS:-30}"
+NMAP_FAST_FLAGS=(-sS -T5 -n -Pn --max-retries 1 --host-timeout 15s)
 
 case "$ACTION" in
 
@@ -19,8 +21,8 @@ case "$ACTION" in
         ;;
 
     port_scan)
-        echo "[ATTACK] SYN Port Scan → $TARGET (nmap top 1000 ports)"
-        nmap -sS -T4 --top-ports 1000 "$TARGET" 2>/dev/null || true
+        echo "[ATTACK] SYN Port Scan → $TARGET (nmap top $SCAN_PORTS ports, fast demo)"
+        nmap "${NMAP_FAST_FLAGS[@]}" --top-ports "$SCAN_PORTS" "$TARGET" 2>/dev/null || true
         echo "[DONE] Port scan complete."
         ;;
 
@@ -48,7 +50,7 @@ case "$ACTION" in
         sleep 5
 
         echo "[3/4] Port Scan attack..."
-        nmap -sS -T4 --top-ports 500 "$TARGET" >/dev/null 2>&1 || true
+        nmap "${NMAP_FAST_FLAGS[@]}" --top-ports "$SCAN_PORTS" "$TARGET" >/dev/null 2>&1 || true
         echo "      ✓ Port scan done — check dashboard for detection"
         sleep 5
 
@@ -68,7 +70,7 @@ case "$ACTION" in
         echo ""
         echo "Actions:"
         echo "  icmp_flood   — ICMP flood (hping3, 30s)"
-        echo "  port_scan    — SYN scan (nmap, top 1000)"
+        echo "  port_scan    — SYN scan (nmap, top ${SCAN_PORTS}; set SCAN_PORTS=N to override)"
         echo "  byte_flood   — Large-packet flood (hping3, 30s)"
         echo "  full_demo    — Full scenario: normal → flood → scan → recovery"
         echo ""

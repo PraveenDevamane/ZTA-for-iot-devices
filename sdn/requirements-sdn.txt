@@ -1,7 +1,9 @@
-# BAZTA — SDN Controller Dependencies (Deprecated)
+# BAZTA — SDN Controller Dependencies (Linux/Mininet VM only)
 #
-# Note: The Python-based SDN controller (Ryu/OS-Ken) has been replaced by the Java-based ONOS controller.
-# You no longer need to install these Python packages.
+# IMPORTANT: Run these commands in order:
+#   pip install -r requirements-sdn.txt
+#
+# os-ken is the drop-in replacement for the unmaintained ryu project
 
-# requests>=2.33.1 (Kept for historical reference if building external python scripts)
+os-ken>=2.6.1
 requests>=2.33.1

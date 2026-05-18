@@ -7,6 +7,9 @@ Flask + SocketIO backend that:
   3. Serves the monitoring dashboard at GET /
 """
 
+import eventlet
+eventlet.monkey_patch()
+
 from flask import Flask, request, jsonify, render_template
 from flask_socketio import SocketIO
 from core import FlowFeatureExtractor, TrustEngine
@@ -17,7 +20,7 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 app = Flask(__name__)
 app.config["SECRET_KEY"] = "bazta-iot-2026"
-socketio = SocketIO(app, cors_allowed_origins="*", async_mode="threading")
+socketio = SocketIO(app, async_mode='eventlet', cors_allowed_origins="*")
 
 extractor = FlowFeatureExtractor(window_sec=30)
 engine    = TrustEngine(models_dir=os.path.join(BASE_DIR, "models"))

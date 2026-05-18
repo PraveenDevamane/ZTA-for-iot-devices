@@ -2,8 +2,8 @@ import pickle, os, json
 import numpy as np
 from sklearn.ensemble import IsolationForest
 
-DECAY   = 0.95    # trust recovers slowly when benign
-BASE    = 100.0   # starting trust
+RECOVERY_RATE = 0.08    # trust recovers gradually on benign traffic
+BASE          = 100.0   # starting trust
 
 # Thresholds tuned from YOUR data:
 #   - Normal ICMP pairs: ~18 pps  → flood threshold = 5× = 90 pps (conservative)
@@ -112,9 +112,6 @@ class TrustEngine:
         src = features["src_ip"]
         score = self._scores.get(src, BASE)
 
-        # Decay toward zero (trust erodes with every cycle if not earned)
-        score *= DECAY
-
         triggered = []
 
         # 1. Rule-based checks (fast, O(n_rules))
@@ -146,6 +143,9 @@ class TrustEngine:
                 score -= 30
                 ml_label = f"ml_anomaly({ml_score:.3f})"
                 triggered.append(ml_label)
+
+        if not triggered:
+            score += (BASE - score) * RECOVERY_RATE
 
         score = max(0.0, min(100.0, score))
         self._scores[src] = score

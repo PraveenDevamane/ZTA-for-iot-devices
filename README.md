@@ -1,98 +1,230 @@
-# BAZTA — Zero Trust Architecture for IoT Devices
+# BAZTA — Complete Setup Guide
 
-Behavioral Anomaly-based Zero Trust Architecture for securing campus IoT networks using SDN, machine learning, and real-time trust scoring.
+Behavioral Anomaly-based Zero Trust Architecture for securing IoT devices using:
+
+* SDN (Software Defined Networking)
+* OS-Ken Controller
+* Mininet
+* Open vSwitch
+* Flask + SocketIO Dashboard
+* Machine Learning Trust Engine
 
 ---
 
-## Architecture
+# Architecture
 
-```
+```text
 IoT Devices (h1–h6)
-    │
-    ▼
-┌──────────────┐
-│   Mininet     │   Virtual campus network (3 microsegments)
-│   OVS 1.3    │
-└──────┬───────┘
-       │  OpenFlow
-┌──────┴───────────────┐
-│   ONOS Controller     │   Intercepts flows, installs block rules (Java App)
-└──────┬───────────────┘
-       │  REST API
-┌──────┴───────────────────────┐
-│   Flask + SocketIO (app.py)   │
-│   ├── Feature Extractor       │   Rolling window stats per IP
-│   ├── Trust Engine + ML       │   Rule-based + Isolation Forest
-│   └── WebSocket Dashboard     │   Real-time monitoring
+        │
+        ▼
+┌────────────────────┐
+│      Mininet       │
+│   Open vSwitch     │
+└─────────┬──────────┘
+          │ OpenFlow
+┌─────────┴──────────┐
+│   OS-Ken Controller│
+└─────────┬──────────┘
+          │ REST API
+┌─────────┴────────────────────┐
+│ Flask + SocketIO Dashboard   │
+│  Trust Engine + ML Model     │
 └──────────────────────────────┘
 ```
 
 ---
 
-## Prerequisites
+# PART 1 — SYSTEM SETUP
 
-- **OS:** Ubuntu 20.04 / 22.04 (required for Mininet + ONOS)
-- **Python:** 3.8 or higher
-- **System packages:** Mininet, Open vSwitch, hping3, nmap
-- **Java:** JDK 11 and Maven (required for building the ONOS Java application)
-
-Install system packages first:
+## Step 1 — Update Ubuntu
 
 ```bash
-sudo apt update
-sudo apt install -y mininet openvswitch-switch hping3 nmap python3-pip python3-venv openjdk-11-jdk maven
+sudo apt update && sudo apt upgrade -y
 ```
 
 ---
 
-## Setup (Step by Step)
-
-### Step 1 — Clone the Repository
+## Step 2 — Install Required System Packages
 
 ```bash
-git clone https://github.com/PraveenDevamane/ZTA-for-iot-devices.git
-cd ZTA-for-iot-devices
+sudo apt install -y \
+python3.10 \
+python3.10-venv \
+python3-pip \
+mininet \
+openvswitch-switch \
+hping3 \
+nmap \
+unzip \
+net-tools
 ```
 
-### Step 2 — Create Virtual Environment and Install Dependencies
+---
 
-Modern Linux distributions require using a virtual environment to avoid conflicts with system Python packages.
+## Step 3 — Verify Mininet
 
 ```bash
-# Create and activate a virtual environment
-python3 -m venv venv
-source venv/bin/activate
+sudo mn --test pingall
+```
 
-# Install dashboard dependencies
+Expected:
+
+```text
+0% dropped
+```
+
+---
+
+# PART 2 — CREATE PYTHON VIRTUAL ENVIRONMENT
+
+## Step 4 — Go to Home Directory
+
+```bash
+cd ~
+```
+
+---
+
+---
+
+## Step 6 — Create Python 3.10 Virtual Environment
+
+```bash
+python3.10 -m venv myenv
+```
+
+---
+
+## Step 7 — Activate Environment
+
+```bash
+source ~/myenv/bin/activate
+```
+
+Expected:
+
+```text
+(myenv)
+```
+
+---
+
+## Step 8 — Verify Python Version
+
+```bash
+python --version
+```
+
+Expected:
+
+```text
+Python 3.10.x
+```
+
+---
+
+# PART 3 — PROJECT SETUP
+
+## Step 9 — Go to Project Directory
+
+```bash
+cd /mnt/share/miniproject
+```
+
+---
+
+# PART 4 — REQUIREMENTS FILES
+
+## requirements.txt
+
+Replace contents with:
+
+```txt
+flask==3.0.3
+flask-socketio==5.3.6
+python-socketio==5.11.2
+python-engineio==4.9.1
+eventlet==0.33.3
+numpy==1.26.4
+scikit-learn==1.5.2
+joblib==1.4.2
+pandas==2.2.3
+```
+
+---
+
+## sdn/requirements-sdn.txt
+
+Replace contents with:
+
+```txt
+os-ken==2.6.0
+requests==2.32.3
+```
+
+---
+
+# PART 5 — INSTALL PYTHON DEPENDENCIES
+
+## Step 10 — Upgrade pip
+
+```bash
+pip install --upgrade pip
+```
+
+---
+
+## Step 11 — Install Dashboard Dependencies
+
+```bash
 pip install -r requirements.txt
 ```
 
-This installs: Flask, Flask-SocketIO, NumPy, scikit-learn, joblib, pandas.
+---
 
-### Step 3 — Install and Run ONOS
-
-Since we use the Java-based ONOS controller, you need to download ONOS and build our custom application:
+## Step 12 — Install SDN Dependencies
 
 ```bash
-# 1. Download and start ONOS 2.7.0 locally (in your home directory to avoid permission issues)
-cd ~
-wget https://repo1.maven.org/maven2/org/onosproject/onos-releases/2.7.0/onos-2.7.0.tar.gz
-tar -xzf onos-2.7.0.tar.gz
-cd onos-2.7.0
-bin/onos-service start &
-
-# 2. Go back to your project folder and build our Java ONOS application
-cd /mnt/share/miniproject/sdn/bazta-onos-app
-mvn clean install
-
-# 3. Install the application into running ONOS
-~/onos-2.7.0/bin/onos-app localhost install! target/bazta-onos-app-1.0-SNAPSHOT.oar
-cd ../..
+pip install -r sdn/requirements-sdn.txt
 ```
 
-### Step 4 — Extract ML Models & Verify Setup
+---
 
-The pre-trained Isolation Forest model is compressed due to GitHub file size limits. Extract it before running the system:
+## Step 13 — Verify Installation
+
+```bash
+python -c "import flask, flask_socketio, sklearn, pandas, numpy, os_ken; print('ALL OK')"
+```
+
+Expected:
+
+```text
+ALL OK
+```
+
+---
+
+# PART 6 — PROJECT CODE
+
+The project source code is assumed to already contain the required fixes and updates.
+
+Do all code edits inside your IDE before pushing to GitHub.
+
+This setup guide only covers:
+
+* Ubuntu VM setup
+* Python virtual environment setup
+* Dependency installation
+* Running the services
+* Mininet testing
+* Attack simulation
+* Troubleshooting runtime issues
+
+---
+
+# PART 7 — EXTRACT ML MODEL
+
+## Step 20 — Extract Model Files
 
 ```bash
 cd models
@@ -100,179 +232,265 @@ unzip live_if_model.zip
 cd ..
 ```
 
-Then verify the TrustEngine loads it correctly:
+---
+
+## Step 21 — Verify ML Setup
 
 ```bash
 python -c "from core import TrustEngine, FlowFeatureExtractor; print('Setup OK')"
 ```
 
-*(The ML model is already pre-trained on Kaggle using the CICIoT2023 dataset.)*
+Expected:
 
-If this prints `Setup OK`, everything is installed correctly.
+```text
+Setup OK
+```
 
 ---
 
-## Running the Project (3 Terminals)
+# PART 9 — RUN THE PROJECT
 
-### Terminal 1 — Start the Dashboard + Trust Engine
+You need 3 terminals.
+
+---
+
+# TERMINAL 1 — Flask Dashboard
 
 ```bash
-source venv/bin/activate
+cd /mnt/share/miniproject
+source ~/myenv/bin/activate
 python app.py
 ```
 
-You should see:
+Expected:
 
-```
-============================================================
-  BAZTA — Zero Trust IoT Security Dashboard
-============================================================
-  Dashboard  :  http://0.0.0.0:5050
-  Trust API  :  POST http://0.0.0.0:5050/score_flow
-  ✓ ML Model loaded
-  ✓ Scaler loaded
-============================================================
+```text
+Running on http://0.0.0.0:5050
 ```
 
-Open **http://localhost:5050** in your browser to see the dashboard.
+Open browser:
 
-### Terminal 2 — Start ONOS and the BAZTA App
-
-Ensure ONOS is running in Terminal 2:
-```bash
-cd ~/onos-2.7.0
-bin/onos-service
+```text
+http://127.0.0.1:5050
 ```
-Our installed `bazta-onos-app` will automatically start processing packets and talking to the Trust API.
 
-### Terminal 3 — Start the Mininet Network
+Dashboard should show:
+
+```text
+Connected
+```
+
+---
+
+# TERMINAL 2 — OS-Ken Controller
 
 ```bash
-sudo python sdn/mininet_topo.py
+cd /mnt/share/miniproject
+source ~/myenv/bin/activate
+python -m os_ken.cmd.manager sdn/bazta_osken_controller.py
 ```
 
-You should see the Mininet CLI prompt: `mininet>`
+Expected:
+
+```text
+Switch connected
+```
 
 ---
 
-## Demo Attacks (Run in Mininet CLI)
+# TERMINAL 3 — Mininet
 
-Once all 3 terminals are running:
+## Clean Old Topology
 
 ```bash
-# Test normal connectivity
-mininet> pingall
-
-# Full attack demo (normal → ICMP flood → port scan → recovery)
-mininet> h1 bash scripts/attacks.sh full_demo 10.0.1.2
-
-# Individual attacks
-mininet> h1 bash scripts/attacks.sh icmp_flood 10.0.1.2
-mininet> h1 bash scripts/attacks.sh port_scan 10.0.1.2
-mininet> h1 bash scripts/attacks.sh byte_flood 10.0.1.2
+sudo mn -c
 ```
-
-Watch the dashboard at **http://localhost:5050** — you'll see trust scores drop, attacks detected, and hosts getting blocked in real time.
 
 ---
 
-## One-Shot Setup (Alternative)
-
-If you prefer a single command:
+## Start Topology
 
 ```bash
-bash setup.sh
+cd /mnt/share/miniproject
+sudo python3 sdn/mininet_topo.py
 ```
 
-This installs dependencies and verifies the setup automatically. You still need to install ONOS and build the Java application separately (Step 3).
+Expected:
 
----
-
-## Project Structure
-
-```
-├── app.py                       # Flask + SocketIO server (main entry point)
-├── setup.sh                     # One-shot setup script
-├── requirements.txt             # Dashboard dependencies
-│
-├── core/                        # Trust scoring pipeline
-│   ├── trust_engine.py          # Rule-based + ML anomaly scoring
-│   ├── feature_extractor.py     # Per-IP rolling window features
-│   └── acc91.ipynb              # Kaggle notebook used for model training
-│
-├── sdn/                         # SDN components
-│   ├── bazta-onos-app/          # ONOS Java application (Maven project)
-│   ├── mininet_topo.py          # Campus IoT network topology
-│   └── requirements-sdn.txt     # (Deprecated) Old SDN Python dependencies
-│
-├── models/                      # Trained ML models
-│   ├── live_if_model.pkl        # Live Isolation Forest (4 features)
-│   ├── live_scaler.pkl          # StandardScaler for live model
-│   └── live_model_meta.json     # Model metadata + metrics
-│
-├── scripts/                     # Automation & testing
-│   └── attacks.sh               # Attack simulation scripts for Mininet
-│
-├── templates/index.html         # Dashboard HTML
-└── static/style.css             # Dashboard CSS
+```text
+mininet>
 ```
 
 ---
 
-## ML Models (CICIoT2023 Dataset)
+# PART 10 — TESTING
 
-The anomaly detection model was trained on the CICIoT2023 dataset using Kaggle (see `core/acc91.ipynb` for the training notebook). The dataset provides modern IoT network traffic scenarios, including various DoS and DDoS attacks.
+## Step 22 — Test Connectivity
 
-| Model              | Accuracy | Precision | Recall  | F1 Score | Type                |
-|--------------------|----------|-----------|---------|----------|---------------------|
-| Isolation Forest   | 91.28%   | 99.87%    | 91.20%  | 95.33%   | Unsupervised        |
-
-The **live model** is deployed in `models/live_if_model.pkl` and evaluates 4 real-time extracted flow features to generate a trust score.
-
----
-
-## Detection Capabilities
-
-| Attack          | Feature         | Threshold   | Penalty | Action      |
-|-----------------|-----------------|-------------|---------|-------------|
-| ICMP Flood      | `pkt_rate`      | > 90 pps    | −50     | BLOCK       |
-| Port Scan       | `unique_ports`  | > 20 / 30s  | −40     | BLOCK       |
-| High Entropy    | `port_entropy`  | > 3.5       | −20     | RATE_LIMIT  |
-| Byte Flood      | `byte_rate`     | > 50 KB/s   | −30     | BLOCK       |
-| ML Anomaly      | Isolation Forest| score < −0.1| −30     | BLOCK       |
-
-**Trust Score Actions:**
-
-| Score Range | Action     | Description               |
-|-------------|------------|---------------------------|
-| ≥ 70        | ALLOW      | Normal traffic             |
-| 30 – 70     | RATE_LIMIT | Suspicious, limit traffic  |
-| < 30        | BLOCK      | Malicious, drop all packets|
-
----
-
-## Troubleshooting
-
-### `ModuleNotFoundError: No module named 'core'`
-
-Make sure you are running commands from the project root directory:
+Inside Mininet:
 
 ```bash
-cd ZTA-for-iot-devices
-python app.py
+h1 ping -c 3 10.0.1.2
 ```
-
-### Dashboard shows "Disconnected"
-
-Make sure `app.py` is running in Terminal 1 before opening the browser.
 
 ---
 
-## Tech Stack
+## Step 23 — ICMP Flood Attack
 
-- **SDN Controller:** ONOS 2.7.0 (Java) + Custom OSGi App
-- **Virtual Network:** Mininet + Open vSwitch
-- **Trust Engine:** Python (rule-based + scikit-learn Isolation Forest)
-- **ML Models:** Isolation Forest
-- **Dataset:** CICIoT2023
-- **Dashboard:** Flask + SocketIO + Vanilla JS (WebSocket real-time)
+```bash
+h1 bash scripts/attacks.sh icmp_flood 10.0.1.2
+```
+
+Expected:
+
+* Trust score drops
+* Dashboard alert appears
+* Action becomes BLOCK
+
+---
+
+## Step 24 — Port Scan Attack
+
+Fast scan:
+
+```bash
+h1 nmap -F 10.0.1.2
+```
+
+Full scan:
+
+```bash
+h1 bash scripts/attacks.sh port_scan 10.0.1.2
+```
+
+---
+
+## Step 25 — Byte Flood Attack
+
+```bash
+h1 bash scripts/attacks.sh byte_flood 10.0.1.2
+```
+
+---
+
+## Step 26 — Full Demo
+
+```bash
+h1 bash scripts/attacks.sh full_demo 10.0.1.2
+```
+
+Flow:
+
+1. Normal traffic
+2. ICMP flood
+3. Port scan
+4. Recovery
+
+---
+
+# PART 11 — STOP EVERYTHING
+
+## Stop Mininet
+
+```bash
+sudo mn -c
+```
+
+---
+
+## Stop Flask Dashboard
+
+```bash
+sudo pkill -f app.py
+```
+
+---
+
+## Stop OS-Ken Controller
+
+```bash
+sudo pkill -f os_ken
+```
+
+---
+
+# PROJECT STRUCTURE
+
+```text
+├── app.py
+├── requirements.txt
+├── setup.sh
+│
+├── core/
+│   ├── trust_engine.py
+│   ├── feature_extractor.py
+│   └── acc91.ipynb
+│
+├── sdn/
+│   ├── bazta_osken_controller.py
+│   ├── mininet_topo.py
+│   └── requirements-sdn.txt
+│
+├── models/
+│   ├── live_if_model.pkl
+│   ├── live_scaler.pkl
+│   └── live_model_meta.json
+│
+├── scripts/
+│   └── attacks.sh
+│
+├── templates/
+│   └── index.html
+│
+└── static/
+    └── style.css
+```
+
+---
+
+# TROUBLESHOOTING
+
+## Dashboard shows "Disconnected"
+
+Make sure:
+
+* app.py is running
+* SocketIO versions match
+* browser opened after Flask starts
+
+---
+
+## Mininet Cleanup
+
+```bash
+sudo mn -c
+```
+
+---
+
+## Open vSwitch Restart
+
+```bash
+sudo systemctl restart openvswitch-switch
+```
+
+---
+
+## Kill Stuck Processes
+
+```bash
+sudo pkill -f app.py
+sudo pkill -f os_ken
+sudo pkill -f mininet
+```
+
+---
+
+# TECH STACK
+
+* SDN Controller: OS-Ken
+* Virtual Network: Mininet + Open vSwitch
+* Dashboard: Flask + SocketIO
+* ML Model: Isolation Forest
+* Dataset: CICIoT2023
+* Detection: Behavioral Anomaly Detection

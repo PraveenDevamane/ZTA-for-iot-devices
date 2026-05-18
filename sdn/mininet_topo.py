@@ -24,7 +24,7 @@ class CampusIoTTopo(Topo):
             for host_idx in range(1, 3):
                 h = self.addHost(
                     f"h{(seg-1)*2 + host_idx}",
-                    ip=f"10.0.{seg}.{host_idx}/24"
+                    ip=f"10.0.{seg}.{host_idx}/8"
                 )
                 self.addLink(h, sw)
 
@@ -50,11 +50,11 @@ def run():
     print("    h1 ping h2")
     print("    pingall")
     print("\n  Attack scenarios:")
-    print("    h1 bash attacks.sh icmp_flood 10.0.1.2")
-    print("    h1 bash attacks.sh port_scan 10.0.1.2")
-    print("    h1 bash attacks.sh byte_flood 10.0.1.2")
-    print("    h1 bash attacks.sh full_demo 10.0.1.2")
-    print("\n  Dashboard: http://localhost:5000")
+    print("    h1 bash scripts/attacks.sh icmp_flood 10.0.1.2")
+    print("    h1 bash scripts/attacks.sh port_scan 10.0.1.2")
+    print("    h1 bash scripts/attacks.sh byte_flood 10.0.1.2")
+    print("    h1 bash scripts/attacks.sh full_demo 10.0.1.2")
+    print("\n  Dashboard: http://localhost:5050")
     print("="*60 + "\n")
 
     CLI(net)

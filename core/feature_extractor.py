@@ -11,7 +11,7 @@ class FlowFeatureExtractor:
         self.window = window_sec
         # {src_ip: deque of (timestamp, port)}
         self._port_log = defaultdict(deque)
-        # {src_ip: deque of (timestamp, pkt_count)}
+        # {src_ip: deque of (timestamp, pkt_count, byte_count)}
         self._pkt_log  = defaultdict(deque)
 
     def reset(self):
@@ -32,8 +32,11 @@ class FlowFeatureExtractor:
             self._port_log[src].append((now, int(flow["port"])))
         self._prune(self._port_log[src], now)
 
-        # Packet rate tracking
-        self._pkt_log[src].append((now, flow["packets"]))
+        packets = int(flow.get("packets", 1) or 1)
+        byte_count = int(flow.get("bytes", 0) or 0)
+
+        # Packet/byte rate tracking
+        self._pkt_log[src].append((now, packets, byte_count))
         self._prune(self._pkt_log[src], now)
 
         ports_seen = [p for _, p in self._port_log[src]]
@@ -49,15 +52,19 @@ class FlowFeatureExtractor:
                 (c/total) * math.log2(c/total) for c in counts.values()
             )
 
-        total_pkts = sum(p for _, p in self._pkt_log[src])
-        elapsed = self.window  # normalise to window
+        total_pkts = sum(p for _, p, _ in self._pkt_log[src])
+        total_bytes = sum(b for _, _, b in self._pkt_log[src])
+        if self._pkt_log[src]:
+            elapsed = max(now - self._pkt_log[src][0][0], 1.0)
+        else:
+            elapsed = 1.0
 
         return {
             "src_ip":       src,
             "dst_ip":       flow["dst_ip"],
             "proto":        flow["proto"],
-            "pkt_rate":     flow["pkt_rate"],      # already in flow
-            "byte_rate":    flow["byte_rate"],
+            "pkt_rate":     round(total_pkts / elapsed, 2),
+            "byte_rate":    round(total_bytes / elapsed, 2),
             "unique_ports": unique_ports,
             "port_entropy": round(port_entropy, 4),
             "window_pkts":  total_pkts,
