@@ -9,6 +9,64 @@ TRUST_API = "http://127.0.0.1:5050/score_flow"
 BLOCK_HARD_TIMEOUT = 30
 BLOCK_IDLE_TIMEOUT = 10
 
+IP_TO_HOST = {
+    '10.0.1.1': 'h1',
+    '10.0.1.2': 'h2',
+    '10.0.2.1': 'h3',
+    '10.0.2.2': 'h4',
+    '10.0.3.1': 'h5',
+    '10.0.3.2': 'h6',
+}
+
+DPID_TO_NAME = {
+    1: 's0 (Core)',
+    2: 's1 (Seg A)',
+    3: 's2 (Seg B)',
+    4: 's3 (Seg C)',
+}
+
+def get_log_time():
+    return time.strftime('%H:%M:%S')
+
+def get_host_name(ip):
+    return IP_TO_HOST.get(ip, ip)
+
+def get_switch_name(dpid):
+    try:
+        val = int(dpid)
+        return DPID_TO_NAME.get(val, f"s{val}")
+    except ValueError:
+        return f"sw_{dpid}"
+
+def get_flow_path(src_ip, dst_ip):
+    src_host = get_host_name(src_ip)
+    dst_host = get_host_name(dst_ip) if dst_ip else "Unknown"
+    
+    def ip_to_sw(ip):
+        if not ip:
+            return None
+        parts = ip.split('.')
+        if len(parts) >= 3 and parts[0] == '10':
+            seg = parts[2]
+            if seg in ['1', '2', '3']:
+                return f"s{seg}"
+        return "s_ext" if ip else None
+
+    src_sw = ip_to_sw(src_ip)
+    dst_sw = ip_to_sw(dst_ip)
+    
+    if not dst_sw or src_sw == dst_sw:
+        # Same segment switch
+        sw_path = src_sw if src_sw else ""
+    else:
+        # Different segments -> traffic traverses s0 (Core Switch)
+        sw_path = f"{src_sw} → s0 (Core) → {dst_sw}"
+        
+    if sw_path:
+        return f"{src_host} ({src_ip}) → {sw_path} → {dst_host} ({dst_ip or 'Unknown'})"
+    else:
+        return f"{src_host} ({src_ip}) → {dst_host} ({dst_ip or 'Unknown'})"
+
 class BAZTAController(app_manager.OSKenApp):
     OFP_VERSIONS = [ofproto_v1_3.OFP_VERSION]
 
@@ -31,7 +89,8 @@ class BAZTAController(app_manager.OSKenApp):
         actions = [parser.OFPActionOutput(ofproto.OFPP_CONTROLLER,
                                           ofproto.OFPCML_NO_BUFFER)]
         self._add_flow(dp, priority=0, match=match, actions=actions)
-        self.logger.info("Switch connected: dpid=%s", dp.id)
+        sw = get_switch_name(dp.id)
+        self.logger.info("Switch Connected: %s (dpid=%s)", sw, dp.id)
 
     # ── Main packet handler ─────────────────────────────────────────────
     @set_ev_cls(ofp_event.EventOFPPacketIn, MAIN_DISPATCHER)
@@ -65,18 +124,25 @@ class BAZTAController(app_manager.OSKenApp):
                 action = result.get("action", "ALLOW")
                 score  = result.get("trust_score", 100)
                 src_ip = ip_pkt.src
+                dst_ip = ip_pkt.dst
 
+                sw = get_switch_name(dpid)
+                triggered_str = ", ".join(result.get("triggered", [])) if result.get("triggered") else "None"
+                path_str = get_flow_path(src_ip, dst_ip)
+                
                 self.logger.info(
-                    "[BAZTA] dpid=%s src=%s score=%.1f action=%s triggered=%s",
-                    dpid, src_ip, score, action, result.get("triggered", [])
+                    "[%s] [FLOW_MONITOR] [%s] [%s] [Score: %d] [%s] [Triggers: %s]",
+                    get_log_time(), sw, path_str, int(score), action, triggered_str
                 )
 
                 if action == "BLOCK":
-                    self._install_block_rule(dp, parser, src_ip)
+                    self._install_block_rule(dp, parser, src_ip, dst_ip, int(score), triggered_str)
                     return  # drop this packet too
                 elif action == "RATE_LIMIT":
-                    # For now: log + forward. Can add meter later.
-                    self.logger.warning("[RATE_LIMIT] src=%s score=%.1f", src_ip, score)
+                    self.logger.warning(
+                        "[%s] [RATE_LIMIT] [%s] [%s] [Score: %d] [RATE_LIMIT] [Triggers: %s]",
+                        get_log_time(), sw, path_str, int(score), triggered_str
+                    )
 
         # Normal L2 forwarding
         dst_mac = eth.dst
@@ -142,24 +208,43 @@ class BAZTAController(app_manager.OSKenApp):
             return None
 
     # ── Install BLOCK rule (microsegment isolation) ──────────────────────
-    def _install_block_rule(self, dp, parser, src_ip):
+    def _install_block_rule(self, dp, parser, src_ip, dst_ip=None, score=0, triggered="None"):
         self.blocked.setdefault(dp.id, set()).add(src_ip)
 
-        # Match all traffic from this src_ip and drop it
-        match = parser.OFPMatch(
+        # 1. Egress Block: Drop all traffic originating from this compromised host
+        match_egress = parser.OFPMatch(
             eth_type=0x0800,
             ipv4_src=src_ip
         )
-        # Empty action list = DROP
         self._add_flow(
             dp,
             priority=100,      # higher than forwarding rules
-            match=match,
+            match=match_egress,
             actions=[],
             hard_timeout=BLOCK_HARD_TIMEOUT,
             idle_timeout=BLOCK_IDLE_TIMEOUT
         )
-        self.logger.warning("[BLOCK INSTALLED] dpid=%s src_ip=%s", dp.id, src_ip)
+
+        # 2. Ingress Block: Drop all traffic destined for this compromised host
+        match_ingress = parser.OFPMatch(
+            eth_type=0x0800,
+            ipv4_dst=src_ip
+        )
+        self._add_flow(
+            dp,
+            priority=100,      # higher than forwarding rules
+            match=match_ingress,
+            actions=[],
+            hard_timeout=BLOCK_HARD_TIMEOUT,
+            idle_timeout=BLOCK_IDLE_TIMEOUT
+        )
+
+        sw = get_switch_name(dp.id)
+        path_str = get_flow_path(src_ip, dst_ip)
+        self.logger.warning(
+            "[%s] [BLOCK_INSTALLED] [%s] [%s] [Score: %d] [BLOCK] [Triggers: %s]",
+            get_log_time(), sw, path_str, score, triggered
+        )
 
     # ── Helper: add OpenFlow rule ────────────────────────────────────────
     def _add_flow(self, dp, priority, match, actions,

@@ -15,10 +15,10 @@ class CampusIoTTopo(Topo):
       └── s3 (segment C: IoT devices h5, h6)
     """
     def build(self):
-        core = self.addSwitch("s0")  # core/aggregation switch
+        core = self.addSwitch("s0", dpid="0000000000000001")  # core/aggregation switch
 
         for seg in range(1, 4):
-            sw = self.addSwitch(f"s{seg}")
+            sw = self.addSwitch(f"s{seg}", dpid=f"000000000000000{seg+1}")
             self.addLink(sw, core)
 
             for host_idx in range(1, 3):

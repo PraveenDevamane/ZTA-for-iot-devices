@@ -8,7 +8,29 @@
 set -e
 
 ACTION="${1:-help}"
-TARGET="${2:-10.0.0.2}"
+TARGET="${2:-10.0.1.2}"
+
+# Resolve hostnames to IPs
+case "$TARGET" in
+    h1) TARGET="10.0.1.1" ;;
+    h2) TARGET="10.0.1.2" ;;
+    h3) TARGET="10.0.2.1" ;;
+    h4) TARGET="10.0.2.2" ;;
+    h5) TARGET="10.0.3.1" ;;
+    h6) TARGET="10.0.3.2" ;;
+esac
+
+# Prevent self-flooding/loopback traffic which won't traverse the switch
+LOCAL_IP=$(hostname -I | awk '{print $1}')
+if [ "$TARGET" = "$LOCAL_IP" ]; then
+    if [ "$LOCAL_IP" = "10.0.1.1" ]; then
+        TARGET="10.0.1.2"
+    else
+        TARGET="10.0.1.1"
+    fi
+    echo "[INFO] Target was set to local IP ($LOCAL_IP). Changed target to $TARGET to ensure traffic traverses the switch."
+fi
+
 SCAN_PORTS="${SCAN_PORTS:-30}"
 NMAP_FAST_FLAGS=(-sS -T5 -n -Pn --max-retries 1 --host-timeout 15s)
 

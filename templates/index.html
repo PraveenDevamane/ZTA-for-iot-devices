@@ -128,30 +128,7 @@
             </div>
         </div>
 
-        <!-- ═══ Model Performance Comparison ═══ -->
-        <div class="model-section glass-card" id="model-section">
-            <div class="panel-title"><span class="icon">🤖</span> ML Model Performance Comparison</div>
-            <div class="model-active" id="model-active">
-                <span class="model-badge">Active Model: Loading...</span>
-            </div>
-            <div class="model-table-wrap">
-                <table class="model-table" id="model-table">
-                    <thead>
-                        <tr>
-                            <th>Model</th>
-                            <th>Type</th>
-                            <th>Accuracy</th>
-                            <th>Precision</th>
-                            <th>Recall</th>
-                            <th>F1 Score</th>
-                        </tr>
-                    </thead>
-                    <tbody id="model-tbody">
-                        <tr><td colspan="6" style="text-align:center;color:var(--text-muted)">Loading model data…</td></tr>
-                    </tbody>
-                </table>
-            </div>
-        </div>
+
     </div>
 
     <script>
@@ -163,7 +140,7 @@
     const CIRC = 2 * Math.PI * 17;      // gauge ring circumference (r=17)
 
     // Dynamic topology — hosts are rendered from actual trust scores
-    let knownHosts = new Set();  // all IPs seen so far
+    let knownHosts = new Set(['10.0.1.1', '10.0.1.2', '10.0.2.1', '10.0.2.2', '10.0.3.1', '10.0.3.2']);  // all IPs seen so far
 
     // State
     let trustScores = {};        // ip → {score, action, triggered}
@@ -239,8 +216,8 @@
         if (newHost) renderTopology();
         else updateTopoNodeColor(ev.src_ip, ev.score);
 
-        // Pulse the active link
-        pulseTopoLink(ev.src_ip);
+        // Pulse the active path
+        pulseTopoPath(ev.src_ip, ev.dst_ip);
 
         // Add to feed if triggered
         if (ev.triggered && ev.triggered.length > 0) {
@@ -264,6 +241,8 @@
         trustScores = {};
         totalFlows = 0;
         chartData = { pktRate: [], trustScore: [], uniquePorts: [], labels: [] };
+        knownHosts = new Set(['10.0.1.1', '10.0.1.2', '10.0.2.1', '10.0.2.2', '10.0.3.1', '10.0.3.2']);
+        renderTopology();
         document.getElementById('trust-list').innerHTML =
             '<div class="empty-state"><span class="icon">📡</span><span>Waiting for network flows…</span></div>';
         document.getElementById('feed-list').innerHTML =
@@ -333,69 +312,123 @@
         const benignIps = allIps.filter(ip => ip.startsWith('10.')).sort();
         const attackIps = allIps.filter(ip => !ip.startsWith('10.')).sort();
 
-        // Layout: benign hosts on left, attack hosts on right
-        // Core switch at top center (260, 42)
         const coreX = 260, coreY = 42;
+        const s0X = 260, s0Y = 120;
 
-        // Two sub-switches for grouping
-        const sw1X = 140, sw1Y = 130;  // Internal network switch
-        const sw2X = 380, sw2Y = 130;  // External network switch
+        // Draw s0 (Core Switch)
+        hostsG.innerHTML += `
+            <g class="topo-node">
+                <rect x="${s0X-20}" y="${s0Y-20}" width="40" height="40" rx="6"
+                      fill="rgba(108,124,255,0.15)" stroke="var(--accent-blue)" stroke-width="1.2"/>
+                <text x="${s0X}" y="${s0Y+4}" fill="var(--text-primary)" font-size="9" font-weight="600" text-anchor="middle">s0</text>
+                <text x="${s0X}" y="${s0Y+30}" fill="var(--text-muted)" font-size="8" text-anchor="middle">CORE SW</text>
+            </g>`;
+        // Link from SDN Controller (SDN node Core) to Core Switch s0
+        linksG.innerHTML += `<line class="topo-link" x1="${coreX}" y1="${coreY + 22}" x2="${s0X}" y2="${s0Y - 20}" />`;
 
-        // Draw sub-switches
-        if (benignIps.length > 0) {
-            linksG.innerHTML += `<line class="topo-link" x1="${coreX}" y1="${coreY + 22}" x2="${sw1X}" y2="${sw1Y}" />`;
+        // Determine Segment/External Switches position
+        const hasExternal = attackIps.length > 0;
+        const swPositions = {};
+
+        if (hasExternal) {
+            swPositions['s1'] = { x: 80, y: 210, label: 's1', sub: 'SEGMENT A' };
+            swPositions['s2'] = { x: 180, y: 210, label: 's2', sub: 'SEGMENT B' };
+            swPositions['s3'] = { x: 280, y: 210, label: 's3', sub: 'SEGMENT C' };
+            swPositions['s_ext'] = { x: 420, y: 210, label: 's_ext', sub: 'EXTERNAL' };
+        } else {
+            swPositions['s1'] = { x: 120, y: 210, label: 's1', sub: 'SEGMENT A' };
+            swPositions['s2'] = { x: 260, y: 210, label: 's2', sub: 'SEGMENT B' };
+            swPositions['s3'] = { x: 400, y: 210, label: 's3', sub: 'SEGMENT C' };
+        }
+
+        // Draw links to segment switches and draw the switches themselves
+        Object.entries(swPositions).forEach(([id, pos]) => {
+            const fillCol = id === 's_ext' ? 'rgba(255,68,102,0.1)' : 'rgba(0,255,136,0.1)';
+            const strokeCol = id === 's_ext' ? 'var(--accent-red)' : 'var(--accent-green)';
+            
+            // Draw link from s0 to segment switch
+            linksG.innerHTML += `<line class="topo-link" x1="${s0X}" y1="${s0Y + 20}" x2="${pos.x}" y2="${pos.y - 20}" id="link-s0-${id}" />`;
+            
+            // Draw switch node
             hostsG.innerHTML += `
                 <g class="topo-node">
-                    <rect x="${sw1X-22}" y="${sw1Y-22}" width="44" height="44" rx="8"
-                          fill="rgba(0,255,136,0.1)" stroke="var(--accent-green)" stroke-width="1"/>
-                    <text x="${sw1X}" y="${sw1Y+3}" fill="var(--text-primary)" font-size="9" font-weight="500" text-anchor="middle">SW1</text>
-                    <text x="${sw1X}" y="${sw1Y+32}" fill="var(--text-muted)" font-size="8" text-anchor="middle">INTERNAL</text>
+                    <rect x="${pos.x-20}" y="${pos.y-20}" width="40" height="40" rx="6"
+                          fill="${fillCol}" stroke="${strokeCol}" stroke-width="1.2"/>
+                    <text x="${pos.x}" y="${pos.y+4}" fill="var(--text-primary)" font-size="9" font-weight="600" text-anchor="middle">${pos.label}</text>
+                    <text x="${pos.x}" y="${pos.y+30}" fill="var(--text-muted)" font-size="8" text-anchor="middle">${pos.sub}</text>
                 </g>`;
-        }
-        if (attackIps.length > 0) {
-            linksG.innerHTML += `<line class="topo-link" x1="${coreX}" y1="${coreY + 22}" x2="${sw2X}" y2="${sw2Y}" />`;
-            hostsG.innerHTML += `
-                <g class="topo-node">
-                    <rect x="${sw2X-22}" y="${sw2Y-22}" width="44" height="44" rx="8"
-                          fill="rgba(255,68,102,0.1)" stroke="var(--accent-red)" stroke-width="1"/>
-                    <text x="${sw2X}" y="${sw2Y+3}" fill="var(--text-primary)" font-size="9" font-weight="500" text-anchor="middle">SW2</text>
-                    <text x="${sw2X}" y="${sw2Y+32}" fill="var(--text-muted)" font-size="8" text-anchor="middle">EXTERNAL</text>
-                </g>`;
-        }
+        });
 
-        // Render benign host nodes
-        const hostY = 260;
-        const renderHosts = (ips, switchX, switchY, startX, spacing) => {
+        // Group hosts by switch
+        const getSegmentFromIp = (ip) => {
+            const parts = ip.split('.');
+            if (parts.length >= 3 && parts[0] === '10') {
+                return parseInt(parts[2]); // e.g. 1, 2, 3
+            }
+            return null;
+        };
+
+        const hostsBySwitch = { 's1': [], 's2': [], 's3': [], 's_ext': [] };
+        
+        benignIps.forEach(ip => {
+            const seg = getSegmentFromIp(ip);
+            if (seg === 1) hostsBySwitch['s1'].push(ip);
+            else if (seg === 2) hostsBySwitch['s2'].push(ip);
+            else if (seg === 3) hostsBySwitch['s3'].push(ip);
+        });
+
+        attackIps.forEach(ip => {
+            hostsBySwitch['s_ext'].push(ip);
+        });
+
+        // Draw host nodes and links from switches to hosts
+        const hostY = 300;
+        const spacing = 55; // horizontal spacing between hosts under the same switch
+        
+        Object.entries(hostsBySwitch).forEach(([swId, ips]) => {
+            if (ips.length === 0) return;
+            const pos = swPositions[swId];
+            if (!pos) return;
+            
             const totalWidth = (ips.length - 1) * spacing;
-            const offsetX = startX - totalWidth / 2;
+            const startX = pos.x - totalWidth / 2;
+            
             ips.forEach((ip, i) => {
-                const x = offsetX + i * spacing;
-                const score = trustScores[ip] ? trustScores[ip].score : 95;
-                const cls = score >= 70 ? 'node-safe' : score >= 30 ? 'node-warning' : 'node-danger';
-                const shortIp = ip.replace(/^10\.0\.0\./, '...');
+                const x = startX + i * spacing;
+                const score = trustScores[ip] ? trustScores[ip].score : null;
+                const cls = score === null ? 'node-idle' : (score >= 70 ? 'node-safe' : score >= 30 ? 'node-warning' : 'node-danger');
+                const scoreStr = score === null ? '—' : Math.round(score);
+                const scoreCol = score === null ? 'var(--text-muted)' : scoreColor(score);
+                
+                // Map IP to hostName h1-h6, fallback to short external identifier
+                let hostName = '';
+                if (ip.startsWith('10.')) {
+                    const parts = ip.split('.');
+                    const seg = parseInt(parts[2]);
+                    const hostIdx = parseInt(parts[3]);
+                    hostName = 'h' + ((seg - 1) * 2 + hostIdx);
+                } else {
+                    hostName = 'h' + ip.split('.').slice(-1)[0];
+                }
 
                 // Link from switch to host
-                linksG.innerHTML += `<line class="topo-link" x1="${switchX}" y1="${switchY}" x2="${x}" y2="${hostY}" id="link-${ip}" />`;
+                linksG.innerHTML += `<line class="topo-link" x1="${pos.x}" y1="${pos.y + 20}" x2="${x}" y2="${hostY - 16}" id="link-${ip}" />`;
 
-                // Host circle
+                // Host node
                 hostsG.innerHTML += `
                     <g class="topo-node" id="topo-host-${ip.replace(/\./g, '-')}">
                         <circle cx="${x}" cy="${hostY}" r="16" class="${cls}" />
-                        <text x="${x}" y="${hostY + 4}" fill="var(--text-primary)" font-size="8" font-weight="500" text-anchor="middle">
-                            ${ip.split('.').slice(-1)[0]}
+                        <text x="${x}" y="${hostY + 4}" fill="var(--text-primary)" font-size="9" font-weight="600" text-anchor="middle">
+                            ${hostName}
                         </text>
-                        <text x="${x}" y="${hostY + 30}" fill="var(--text-muted)" font-size="7" text-anchor="middle">${ip}</text>
-                        <text x="${x}" y="${hostY + 42}" fill="${scoreColor(score)}" font-size="8" font-weight="600" text-anchor="middle">${Math.round(score)}</text>
+                        <text x="${x}" y="${hostY + 28}" class="score-label" fill="${scoreCol}" font-size="8" font-weight="600" text-anchor="middle">${scoreStr}</text>
                     </g>`;
             });
-        };
-
-        if (benignIps.length > 0) renderHosts(benignIps, sw1X, sw1Y, sw1X, Math.min(65, 260 / Math.max(benignIps.length, 1)));
-        if (attackIps.length > 0) renderHosts(attackIps, sw2X, sw2Y, sw2X, Math.min(65, 260 / Math.max(attackIps.length, 1)));
+        });
 
         // If no hosts at all, show placeholder
         if (allIps.length === 0) {
-            hostsG.innerHTML = `<text x="260" y="200" fill="var(--text-muted)" font-size="12" text-anchor="middle">Waiting for network flows…</text>`;
+            hostsG.innerHTML += `<text x="260" y="310" fill="var(--text-muted)" font-size="11" font-weight="500" text-anchor="middle">Waiting for network flows… (h1 - h6)</text>`;
         }
     }
 
@@ -404,18 +437,55 @@
         const node = document.getElementById(nodeId);
         if (!node) return;
         const circle = node.querySelector('circle');
-        if (!circle) return;
-        circle.classList.remove('node-idle', 'node-safe', 'node-warning', 'node-danger');
-        if (score >= 70) circle.classList.add('node-safe');
-        else if (score >= 30) circle.classList.add('node-warning');
-        else circle.classList.add('node-danger');
+        if (circle) {
+            circle.classList.remove('node-idle', 'node-safe', 'node-warning', 'node-danger');
+            if (score >= 70) circle.classList.add('node-safe');
+            else if (score >= 30) circle.classList.add('node-warning');
+            else circle.classList.add('node-danger');
+        }
+        const textLabel = node.querySelector('.score-label');
+        if (textLabel) {
+            textLabel.textContent = Math.round(score);
+            textLabel.setAttribute('fill', scoreColor(score));
+        }
     }
 
-    function pulseTopoLink(ip) {
-        const link = document.getElementById('link-' + ip);
-        if (!link) return;
-        link.classList.add('active');
-        setTimeout(() => link.classList.remove('active'), 800);
+    function pulseTopoPath(srcIp, dstIp) {
+        const getSegment = (ip) => {
+            if (!ip) return null;
+            const parts = ip.split('.');
+            if (parts.length >= 3 && parts[0] === '10') {
+                return 's' + parts[2]; // s1, s2, s3
+            } else if (ip && !ip.startsWith('10.')) {
+                return 's_ext';
+            }
+            return null;
+        };
+
+        const srcSw = getSegment(srcIp);
+        const dstSw = getSegment(dstIp);
+
+        const linksToPulse = [];
+
+        // Link from source host to its switch
+        if (srcIp) linksToPulse.push('link-' + srcIp);
+        // Link from destination host to its switch
+        if (dstIp) linksToPulse.push('link-' + dstIp);
+
+        // Links connecting switches
+        if (srcSw && dstSw && srcSw !== dstSw) {
+            linksToPulse.push('link-s0-' + srcSw);
+            linksToPulse.push('link-s0-' + dstSw);
+        }
+
+        // Add class 'active' to all links along the path
+        linksToPulse.forEach(id => {
+            const link = document.getElementById(id);
+            if (link) {
+                link.classList.add('active');
+                setTimeout(() => link.classList.remove('active'), 800);
+            }
+        });
     }
 
     function flashNode(ip) {
@@ -590,29 +660,9 @@
 
     // Initial draw
     drawChart();
+    renderTopology();
 
-    // ── Model Info ─────────────────────────────────────────────
-    fetch('/model_info').then(r => r.json()).then(info => {
-        const badge = document.getElementById('model-active');
-        const modelType = info.model_type || 'none';
-        const scaler = info.has_scaler ? '+ Scaler' : '';
-        const status = info.loaded ? '🟢' : '🔴';
-        badge.innerHTML = `<span class="model-badge">${status} Active: <strong>${modelType}</strong> ${scaler}</span>`;
 
-        if (info.comparison) {
-            const tbody = document.getElementById('model-tbody');
-            tbody.innerHTML = Object.values(info.comparison).map(m => `
-                <tr>
-                    <td class="model-name">${m.name}</td>
-                    <td><span class="model-type-tag">${m.type}</span></td>
-                    <td class="metric">${(m.accuracy * 100).toFixed(1)}%</td>
-                    <td class="metric">${(m.precision * 100).toFixed(1)}%</td>
-                    <td class="metric">${(m.recall * 100).toFixed(1)}%</td>
-                    <td class="metric">${(m.f1_score * 100).toFixed(1)}%</td>
-                </tr>
-            `).join('');
-        }
-    }).catch(() => {});
     </script>
 </body>
 </html>
