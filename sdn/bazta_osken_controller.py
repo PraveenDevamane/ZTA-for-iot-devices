@@ -4,6 +4,61 @@ from os_ken.controller.handler import CONFIG_DISPATCHER, MAIN_DISPATCHER, set_ev
 from os_ken.ofproto import ofproto_v1_3
 from os_ken.lib.packet import packet, ethernet, ipv4, icmp, tcp, udp
 import requests, time, json
+import numpy as np
+from collections import defaultdict
+from threading import Lock
+
+class FlowAggregator:
+    WINDOW_SEC = 5.0
+
+    def __init__(self):
+        self.windows  = defaultdict(list)  # {(src,dst,proto): [(ts, size)]}
+        self.ports    = defaultdict(set)   # {src_ip: {ports seen in window}}
+        self.lock     = Lock()
+
+    def update(self, src_ip, dst_ip, proto, port, pkt_size, timestamp):
+        flow_key = (src_ip, dst_ip, proto)
+        cutoff   = timestamp - self.WINDOW_SEC
+
+        with self.lock:
+            self.windows[flow_key].append((timestamp, pkt_size))
+            self.windows[flow_key] = [(t, s) for t, s in self.windows[flow_key] if t >= cutoff]
+
+            if port:
+                self.ports[src_ip].add(port)
+            window = list(self.windows[flow_key])
+
+        if len(window) < 2:
+            return {
+                "pkt_rate":     1.0,
+                "byte_rate":    float(pkt_size),
+                "unique_ports": 1.0,
+                "port_entropy": 0.0,
+            }
+
+        timestamps = [t for t, _ in window]
+        sizes      = [s for _, s in window]
+        duration   = max(timestamps) - min(timestamps)
+        duration   = duration if duration > 0 else 1e-3
+
+        # port entropy
+        ports_seen = list(self.ports[src_ip])
+        n = len(ports_seen)
+        if n > 1:
+            counts = np.array([ports_seen.count(p) for p in set(ports_seen)], dtype=float)
+            probs  = counts / counts.sum()
+            entropy = float(-np.sum(probs * np.log2(probs + 1e-9)))
+        else:
+            entropy = 0.0
+
+        return {
+            "pkt_rate":     len(window) / duration,
+            "byte_rate":    sum(sizes)  / duration,
+            "unique_ports": float(len(self.ports[src_ip])),
+            "port_entropy": entropy,
+        }
+
+_aggregator = FlowAggregator()
 
 TRUST_API = "http://127.0.0.1:5050/score_flow"
 BLOCK_HARD_TIMEOUT = 30
@@ -89,6 +144,10 @@ class BAZTAController(app_manager.OSKenApp):
         actions = [parser.OFPActionOutput(ofproto.OFPP_CONTROLLER,
                                           ofproto.OFPCML_NO_BUFFER)]
         self._add_flow(dp, priority=0, match=match, actions=actions)
+
+        # Configure Meter 1 for rate limiting (e.g. rate = 200 kbps, drop if exceeded)
+        self._create_meter(dp, meter_id=1, rate_kbps=200)
+
         sw = get_switch_name(dp.id)
         self.logger.info("Switch Connected: %s (dpid=%s)", sw, dp.id)
 
@@ -130,19 +189,18 @@ class BAZTAController(app_manager.OSKenApp):
                 triggered_str = ", ".join(result.get("triggered", [])) if result.get("triggered") else "None"
                 path_str = get_flow_path(src_ip, dst_ip)
                 
-                self.logger.info(
-                    "[%s] [FLOW_MONITOR] [%s] [%s] [Score: %d] [%s] [Triggers: %s]",
-                    get_log_time(), sw, path_str, int(score), action, triggered_str
-                )
-
-                if action == "BLOCK":
-                    self._install_block_rule(dp, parser, src_ip, dst_ip, int(score), triggered_str)
-                    return  # drop this packet too
-                elif action == "RATE_LIMIT":
-                    self.logger.warning(
-                        "[%s] [RATE_LIMIT] [%s] [%s] [Score: %d] [RATE_LIMIT] [Triggers: %s]",
-                        get_log_time(), sw, path_str, int(score), triggered_str
+                if not flow_data.get("is_response", False):
+                    self.logger.info(
+                        "[%s] [FLOW_MONITOR] [%s] [%s] [Score: %d] [%s] [Triggers: %s]",
+                        get_log_time(), sw, path_str, int(score), action, triggered_str
                     )
+
+                    if action == "BLOCK":
+                        self._install_block_rule(dp, parser, src_ip, dst_ip, int(score), triggered_str)
+                        return  # drop this packet too
+                    elif action == "RATE_LIMIT":
+                        self._install_rate_limit_rule(dp, parser, src_ip, dst_ip, int(score), triggered_str)
+
 
         # Normal L2 forwarding
         dst_mac = eth.dst
@@ -177,26 +235,49 @@ class BAZTAController(app_manager.OSKenApp):
 
     # ── Build flow record for Trust API ─────────────────────────────────
     def _build_flow_record(self, ip_pkt, tcp_pkt, udp_pkt, pkt):
-        proto = ip_pkt.proto   # 1=ICMP, 6=TCP, 17=UDP
+        proto = ip_pkt.proto
+        port  = None
+        is_response = False
 
-        port = None
         if tcp_pkt:
             port = tcp_pkt.dst_port
+            if tcp_pkt.has_flags(tcp.TCP_RST) or tcp_pkt.has_flags(tcp.TCP_SYN, tcp.TCP_ACK):
+                is_response = True
         elif udp_pkt:
             port = udp_pkt.dst_port
+        elif proto == 1:
+            icmp_pkt = pkt.get_protocol(icmp.icmp)
+            if icmp_pkt and icmp_pkt.type in [0, 3, 11]:
+                is_response = True
+
+        now      = time.time()
+        pkt_size = len(pkt)
+
+        # real windowed features
+        live = _aggregator.update(
+            src_ip    = ip_pkt.src,
+            dst_ip    = ip_pkt.dst,
+            proto     = proto,
+            port      = port,
+            pkt_size  = pkt_size,
+            timestamp = now,
+        )
 
         return {
-            "src_ip":    ip_pkt.src,
-            "dst_ip":    ip_pkt.dst,
-            "proto":     proto,
-            "port":      port,
-            "packets":   1,           # per-packet call; extractor aggregates
-            "bytes":     len(pkt),
-            "duration":  1,
-            "pkt_rate":  1,           # extractor computes windowed rate
-            "byte_rate": len(pkt),
-            "timestamp": time.time()
+            "src_ip":      ip_pkt.src,
+            "dst_ip":      ip_pkt.dst,
+            "proto":       proto,
+            "port":        port,
+            "bytes":       pkt_size,
+            "timestamp":   now,
+            "is_response": is_response,
+            # real computed features — TrustEngine reads these directly
+            "pkt_rate":     live["pkt_rate"],
+            "byte_rate":    live["byte_rate"],
+            "unique_ports": live["unique_ports"],
+            "port_entropy": live["port_entropy"],
         }
+
 
     # ── Query Flask Trust API ────────────────────────────────────────────
     def _query_trust_api(self, flow_data):
@@ -264,3 +345,64 @@ class BAZTAController(app_manager.OSKenApp):
             hard_timeout=hard_timeout
         )
         dp.send_msg(mod)
+
+    def _create_meter(self, dp, meter_id, rate_kbps):
+        ofproto = dp.ofproto
+        parser  = dp.ofproto_parser
+        
+        # OFPMeterBandDrop drops packets exceeding the rate
+        band = parser.OFPMeterBandDrop(rate=rate_kbps, burst_size=0)
+        req = parser.OFPMeterMod(
+            datapath=dp,
+            command=ofproto.OFPMC_ADD,
+            flags=ofproto.OFPMF_KBPS,
+            meter_id=meter_id,
+            bands=[band]
+        )
+        dp.send_msg(req)
+
+    def _install_rate_limit_rule(self, dp, parser, src_ip, dst_ip=None, score=0, triggered="None"):
+        meter_id = 1
+        ofproto = dp.ofproto
+
+        # Egress Limit: Rate limit all traffic originating from this host
+        match_egress = parser.OFPMatch(
+            eth_type=0x0800,
+            ipv4_src=src_ip
+        )
+        actions = [parser.OFPActionOutput(ofproto.OFPP_NORMAL)]
+        inst = [
+            parser.OFPInstructionActions(ofproto.OFPIT_APPLY_ACTIONS, actions),
+            parser.OFPInstructionMeter(meter_id, ofproto.OFPIT_METER)
+        ]
+        mod = parser.OFPFlowMod(
+            datapath=dp,
+            priority=95,      # higher than regular forwarding (1) but lower than block (100)
+            match=match_egress,
+            instructions=inst,
+            idle_timeout=BLOCK_IDLE_TIMEOUT,
+            hard_timeout=BLOCK_HARD_TIMEOUT
+        )
+        dp.send_msg(mod)
+
+        # Ingress Limit: Rate limit all traffic destined for this host
+        match_ingress = parser.OFPMatch(
+            eth_type=0x0800,
+            ipv4_dst=src_ip
+        )
+        mod_ingress = parser.OFPFlowMod(
+            datapath=dp,
+            priority=95,      # higher than regular forwarding (1) but lower than block (100)
+            match=match_ingress,
+            instructions=inst,
+            idle_timeout=BLOCK_IDLE_TIMEOUT,
+            hard_timeout=BLOCK_HARD_TIMEOUT
+        )
+        dp.send_msg(mod_ingress)
+
+        sw = get_switch_name(dp.id)
+        path_str = get_flow_path(src_ip, dst_ip)
+        self.logger.warning(
+            "[%s] [RATE_LIMIT_INSTALLED] [%s] [%s] [Score: %d] [METER:%d] [Triggers: %s]",
+            get_log_time(), sw, path_str, score, meter_id, triggered
+        )

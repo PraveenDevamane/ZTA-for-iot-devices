@@ -1,6 +1,25 @@
 import pickle, os, json
 import numpy as np
+import warnings
+
+# Suppress sklearn/joblib unpickling and feature name warnings
+try:
+    from sklearn.exceptions import InconsistentVersionWarning
+    warnings.filterwarnings("ignore", category=InconsistentVersionWarning)
+except ImportError:
+    pass
+warnings.filterwarnings("ignore", category=UserWarning, module="sklearn")
+warnings.filterwarnings("ignore", category=UserWarning, module="joblib")
+
 from sklearn.ensemble import IsolationForest
+
+try:
+    import pandas as pd
+    HAS_PANDAS = True
+except ImportError:
+    HAS_PANDAS = False
+
+
 
 RECOVERY_RATE = 0.08    # trust recovers gradually on benign traffic
 BASE          = 100.0   # starting trust
@@ -36,56 +55,41 @@ class TrustEngine:
             models_dir = os.path.join(os.path.dirname(os.path.dirname(
                 os.path.abspath(__file__))), "models")
 
-        # Load the live model pipeline (scaler + model)
+        
         self._load_model_pipeline(models_dir, model_path)
 
     def _load_model_pipeline(self, models_dir, legacy_model_path=None):
         """
-        Load model in order of preference:
-          1. Live pipeline: live_scaler.pkl + live_if_model.pkl (trained on 4 features)
-          2. Legacy: if_model.pkl (original, no scaler)
+        Load live_if_model.pkl and live_scaler.pkl from models_dir.
         """
         live_model_path = os.path.join(models_dir, "live_if_model.pkl")
         live_scaler_path = os.path.join(models_dir, "live_scaler.pkl")
-        live_meta_path = os.path.join(models_dir, "live_model_meta.json")
+        self._scaler = None
+        self._model_meta = None
 
-        # Try live pipeline first
-        if os.path.exists(live_model_path) and os.path.exists(live_scaler_path):
+        if os.path.exists(live_model_path):
             try:
                 import joblib
                 self._model = joblib.load(live_model_path)
-                self._scaler = joblib.load(live_scaler_path)
+                print(f"[TrustEngine] Loaded model: {live_model_path}")
+                
+                if os.path.exists(live_scaler_path):
+                    self._scaler = joblib.load(live_scaler_path)
+                    print(f"[TrustEngine] Loaded scaler: {live_scaler_path}")
+                else:
+                    print("[TrustEngine] WARNING: live_scaler.pkl not found — IF predictions will be wrong")
+
+                # Check for metadata
+                live_meta_path = os.path.join(models_dir, "live_model_meta.json")
                 if os.path.exists(live_meta_path):
                     with open(live_meta_path) as f:
                         self._model_meta = json.load(f)
-                print(f"[TrustEngine] Loaded live pipeline: {live_model_path}")
-                print(f"[TrustEngine] Scaler loaded: {live_scaler_path}")
-                return
-            except Exception as e:
-                print(f"[TrustEngine] Warning: Failed to load live pipeline: {e}")
-
-        # Fallback to legacy model
-        if legacy_model_path and os.path.exists(legacy_model_path):
-            try:
-                with open(legacy_model_path, "rb") as f:
-                    self._model = pickle.load(f)
-                print(f"[TrustEngine] Loaded legacy model: {legacy_model_path}")
-                return
-            except Exception as e:
-                print(f"[TrustEngine] Warning: Failed to load legacy model: {e}")
-
-        # Also try default legacy path
-        legacy_default = os.path.join(models_dir, "if_model.pkl")
-        if os.path.exists(legacy_default):
-            try:
-                with open(legacy_default, "rb") as f:
-                    self._model = pickle.load(f)
-                print(f"[TrustEngine] Loaded legacy model: {legacy_default}")
                 return
             except Exception as e:
                 print(f"[TrustEngine] Warning: Failed to load model: {e}")
 
         print("[TrustEngine] No ML model loaded — using rule-based detection only")
+
 
     # ── offline training (run once on your InSDN dataset) ──────────────
     @staticmethod
@@ -115,34 +119,37 @@ class TrustEngine:
         triggered = []
 
         # 1. Rule-based checks (fast, O(n_rules))
-        for feat, op, threshold, label, penalty in RULES:
-            val = features.get(feat, 0)
-            hit = (val > threshold  if op == ">" else
-                   val < threshold  if op == "<" else False)
-            if hit:
-                score += penalty
-                triggered.append(label)
+        is_response = features.get("is_response", False)
+        if not is_response:
+            for feat, op, threshold, label, penalty in RULES:
+                val = features.get(feat, 0)
+                hit = (val > threshold  if op == ">" else
+                       val < threshold  if op == "<" else False)
+                if hit:
+                    score += penalty
+                    triggered.append(label)
 
-        # 2. ML anomaly score (only if model loaded)
+       
         ml_label = "normal"
-        if self._model:
+        if self._model and not is_response:
             vec = np.array([[
-                features["pkt_rate"],
-                features["byte_rate"],
-                features["unique_ports"],
-                features["port_entropy"],
-            ]])
+                features.get("pkt_rate", 0),
+                features.get("byte_rate", 0),
+                features.get("unique_ports", 0),
+                features.get("port_entropy", 0),
+            ]], dtype=np.float64)
 
-            # Apply scaler if available (live pipeline)
+            # Always scale if scaler exists — no pandas dependency
             if self._scaler is not None:
                 vec = self._scaler.transform(vec)
 
             # decision_function: negative = anomalous, positive = normal
             ml_score = self._model.decision_function(vec)[0]
-            if ml_score < -0.1:
+            if ml_score < -0.26:
                 score -= 30
                 ml_label = f"ml_anomaly({ml_score:.3f})"
                 triggered.append(ml_label)
+
 
         if not triggered:
             score += (BASE - score) * RECOVERY_RATE
@@ -200,7 +207,7 @@ class TrustEngine:
             "features": LIVE_FEATURES,
             "has_scaler": self._scaler is not None,
             "loaded": self._model is not None,
-            "legacy": True,
+            "legacy": False,
         }
 
     @staticmethod

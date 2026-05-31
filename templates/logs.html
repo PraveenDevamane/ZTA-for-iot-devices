@@ -1,0 +1,626 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="BAZTA — SDN logs audit page for Campus IoT Security Monitoring">
+    <title>BAZTA — SDN logs Audit</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.5/socket.io.min.js"></script>
+</head>
+<body>
+    <div class="bg-blobs-container">
+        <div class="blob blob-1"></div>
+        <div class="blob blob-2"></div>
+        <div class="blob blob-3"></div>
+        <canvas id="bg-network-canvas"></canvas>
+    </div>
+    <div class="app-container">
+        <!-- ═══ Header ═══ -->
+        <header class="header glass-card" id="header-bar">
+            <div class="header-brand">
+                <div class="logo-icon">B</div>
+                <div>
+                    <div class="header-title">BAZTA</div>
+                    <div class="header-subtitle">Zero Trust IoT Security · Campus SDN</div>
+                </div>
+            </div>
+            <nav class="header-nav">
+                <a href="/" class="nav-link">Dashboard</a>
+                <a href="/logs" class="nav-link active">SDN Logs</a>
+            </nav>
+            <div class="header-status">
+                <button id="theme-toggle-btn" class="theme-toggle-small" title="Toggle Theme">
+                    <span id="theme-toggle-icon">☀️</span>
+                </button>
+                <div class="connection-badge offline" id="conn-badge">
+                    <span class="status-dot"></span>
+                    <span id="conn-text">Disconnected</span>
+                </div>
+                <div class="flow-counter" id="flow-counter">0 flows</div>
+            </div>
+        </header>
+
+        <!-- ═══ Logs Stats Bar ═══ -->
+        <div class="logs-stats-bar">
+            <div class="glass-card log-stat-card">
+                <div class="log-stat-title">Total Records</div>
+                <div class="log-stat-value total" id="total-logs-count">0</div>
+            </div>
+            <div class="glass-card log-stat-card">
+                <div class="log-stat-title">Allowed Flows</div>
+                <div class="log-stat-value allow" id="allow-logs-count">0</div>
+            </div>
+            <div class="glass-card log-stat-card">
+                <div class="log-stat-title">Rate Limited</div>
+                <div class="log-stat-value rate-limit" id="ratelimit-logs-count">0</div>
+            </div>
+            <div class="glass-card log-stat-card">
+                <div class="log-stat-title">Threats Blocked</div>
+                <div class="log-stat-value block" id="block-logs-count">0</div>
+            </div>
+        </div>
+
+        <!-- ═══ Main Logs Card ═══ -->
+        <div class="logs-console-card glass-card">
+            <div class="panel-title">
+                <span class="icon">📜</span> SDN Traffic Audit Logs
+            </div>
+
+            <!-- Filter Controls -->
+            <div class="filter-bar">
+                <div class="search-container">
+                    <input type="text" id="log-search" class="search-input" placeholder="Search IP, port, protocol, triggers...">
+                    <svg class="search-icon-svg" viewBox="0 0 24 24">
+                        <path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/>
+                    </svg>
+                </div>
+
+                <select id="filter-action" class="filter-select">
+                    <option value="all">All Actions</option>
+                    <option value="ALLOW">ALLOW</option>
+                    <option value="RATE_LIMIT">RATE_LIMIT</option>
+                    <option value="BLOCK">BLOCK</option>
+                </select>
+
+                <select id="filter-proto" class="filter-select">
+                    <option value="all">All Protocols</option>
+                    <option value="6">TCP (6)</option>
+                    <option value="17">UDP (17)</option>
+                    <option value="1">ICMP (1)</option>
+                </select>
+
+                <select id="filter-sort" class="filter-select">
+                    <option value="time-desc">Newest First</option>
+                    <option value="time-asc">Oldest First</option>
+                    <option value="score-asc">Trust Score (Low-High)</option>
+                    <option value="score-desc">Trust Score (High-Low)</option>
+                </select>
+
+                <button id="reset-db-btn" class="reset-btn">
+                    <span class="icon">🗑️</span> Clear Logs
+                </button>
+            </div>
+
+            <!-- Logs Grid Scroller -->
+            <div class="logs-scroller">
+                <div class="logs-header-row">
+                    <div class="logs-header-col">Timestamp</div>
+                    <div class="logs-header-col">Source → Destination</div>
+                    <div class="logs-header-col">Protocol</div>
+                    <div class="logs-header-col">Traffic Rate</div>
+                    <div class="logs-header-col">Trust</div>
+                    <div class="logs-header-col">Action</div>
+                    <div class="logs-header-col">Triggered Alarms</div>
+                </div>
+                <div id="logs-list">
+                    <div class="empty-state">
+                        <span class="icon">🔍</span>
+                        <span>Loading audit event logs...</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Pagination Footer -->
+            <div class="logs-footer">
+                <div class="logs-count-info" id="logs-pagination-info">
+                    Showing 0-0 of 0 entries
+                </div>
+                <div class="logs-pagination">
+                    <button class="pag-btn" id="pag-prev" disabled>Previous</button>
+                    <button class="pag-btn" id="pag-next" disabled>Next</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const socket = io();
+        let logsData = [];
+        let filteredLogs = [];
+        let totalFlowsCount = 0;
+
+        // Pagination State
+        let currentPage = 1;
+        const itemsPerPage = 25;
+
+        // Protocols mapping
+        const protoNames = {
+            1: 'ICMP',
+            6: 'TCP',
+            17: 'UDP'
+        };
+
+        // DOM elements
+        const logsList = document.getElementById('logs-list');
+        const connBadge = document.getElementById('conn-badge');
+        const connText = document.getElementById('conn-text');
+        const flowCounter = document.getElementById('flow-counter');
+        const totalCountVal = document.getElementById('total-logs-count');
+        const allowCountVal = document.getElementById('allow-logs-count');
+        const rateLimitCountVal = document.getElementById('ratelimit-logs-count');
+        const blockCountVal = document.getElementById('block-logs-count');
+
+        const searchInput = document.getElementById('log-search');
+        const filterAction = document.getElementById('filter-action');
+        const filterProto = document.getElementById('filter-proto');
+        const filterSort = document.getElementById('filter-sort');
+        const resetBtn = document.getElementById('reset-db-btn');
+
+        const pagPrev = document.getElementById('pag-prev');
+        const pagNext = document.getElementById('pag-next');
+        const pagInfo = document.getElementById('logs-pagination-info');
+
+        // Socket IO listeners
+        socket.on('connect', () => {
+            connBadge.classList.remove('offline');
+            connText.textContent = 'Connected';
+        });
+
+        socket.on('disconnect', () => {
+            connBadge.classList.add('offline');
+            connText.textContent = 'Disconnected';
+        });
+
+        socket.on('init', (data) => {
+            if (data.events && logsData.length === 0) {
+                logsData = data.events.slice().reverse(); // reverse copy to make newest first
+                updateStats();
+                applyFilters();
+            }
+        });
+
+        socket.on('flow_update', (ev) => {
+            totalFlowsCount++;
+            flowCounter.textContent = totalFlowsCount + ' flows';
+
+            // Add event
+            logsData.unshift(ev);
+            if (logsData.length > 200) {
+                logsData.pop();
+            }
+
+            updateStats();
+            applyFilters();
+        });
+
+        socket.on('reset', () => {
+            logsData = [];
+            filteredLogs = [];
+            totalFlowsCount = 0;
+            flowCounter.textContent = '0 flows';
+            updateStats();
+            applyFilters();
+        });
+
+        // Load historical logs
+        function fetchAllEvents() {
+            fetch('/all_events')
+                .then(res => res.json())
+                .then(data => {
+                    logsData = data.reverse(); // Newest first
+                    updateStats();
+                    applyFilters();
+                })
+                .catch(err => {
+                    console.error("Failed to load logs:", err);
+                    logsList.innerHTML = `
+                        <div class="empty-state">
+                            <span class="icon">⚠️</span>
+                            <span>Error loading logs. Try refreshing.</span>
+                        </div>`;
+                });
+        }
+
+        // Fetch stats from server
+        function fetchFlowStats() {
+            fetch('/stats')
+                .then(r => r.json())
+                .then(s => {
+                    totalFlowsCount = s.total_flows || 0;
+                    flowCounter.textContent = totalFlowsCount + ' flows';
+                })
+                .catch(() => {});
+        }
+
+        // Action score color
+        function getScoreColor(score) {
+            if (score >= 70) return 'var(--safe)';
+            if (score >= 30) return 'var(--warning)';
+            return 'var(--danger)';
+        }
+
+        // Update counts
+        function updateStats() {
+            totalCountVal.textContent = logsData.length;
+            
+            const allowCount = logsData.filter(e => String(e.action || '').toUpperCase() === 'ALLOW').length;
+            const rateLimitCount = logsData.filter(e => String(e.action || '').toUpperCase() === 'RATE_LIMIT').length;
+            const blockCount = logsData.filter(e => String(e.action || '').toUpperCase() === 'BLOCK').length;
+
+            allowCountVal.textContent = allowCount;
+            rateLimitCountVal.textContent = rateLimitCount;
+            blockCountVal.textContent = blockCount;
+        }
+
+        // Filtering and sorting
+        function applyFilters() {
+            const query = searchInput.value.toLowerCase().trim();
+            const action = filterAction.value;
+            const proto = filterProto.value;
+            const sort = filterSort.value;
+
+            // Map standard dropdown protocol values to flexible matches
+            const protoMap = {
+                '6': ['6', 'tcp'],
+                '17': ['17', 'udp'],
+                '1': ['1', 'icmp']
+            };
+
+            filteredLogs = logsData.filter(log => {
+                // Action Filter (case-insensitive and robust)
+                if (action !== 'all' && String(log.action || '').toUpperCase() !== action.toUpperCase()) return false;
+
+                // Protocol Filter (handles both int/string protocol mappings robustly)
+                if (proto !== 'all') {
+                    const logProtoStr = String(log.proto || '').toLowerCase();
+                    const allowedValues = protoMap[proto] || [proto];
+                    if (!allowedValues.includes(logProtoStr)) return false;
+                }
+
+                // Text Search Filter
+                if (query) {
+                    const src = String(log.src_ip || '').toLowerCase();
+                    const dst = String(log.dst_ip || '').toLowerCase();
+                    const port = String(log.port || '').toLowerCase();
+                    const triggers = (log.triggered || []).join(' ').toLowerCase();
+                    const protoText = protoNames[log.proto] ? protoNames[log.proto].toLowerCase() : String(log.proto || '');
+                    
+                    const matchesQuery = src.includes(query) || 
+                                         dst.includes(query) || 
+                                         port.includes(query) || 
+                                         triggers.includes(query) ||
+                                         protoText.includes(query) ||
+                                         String(log.action || '').toLowerCase().includes(query);
+                    if (!matchesQuery) return false;
+                }
+                return true;
+            });
+
+            // Sorting
+            filteredLogs.sort((a, b) => {
+                if (sort === 'time-desc') {
+                    return b.timestamp - a.timestamp;
+                } else if (sort === 'time-asc') {
+                    return a.timestamp - b.timestamp;
+                } else if (sort === 'score-asc') {
+                    return a.score - b.score;
+                } else if (sort === 'score-desc') {
+                    return b.score - a.score;
+                }
+                return 0;
+            });
+
+            currentPage = 1;
+            renderLogs();
+        }
+
+        // Format Byte Rate
+        function formatByteRate(bytesPerSec) {
+            if (bytesPerSec === undefined || bytesPerSec === null) return '0 B/s';
+            if (bytesPerSec >= 1024 * 1024) return (bytesPerSec / (1024 * 1024)).toFixed(1) + ' MB/s';
+            if (bytesPerSec >= 1024) return (bytesPerSec / 1024).toFixed(1) + ' KB/s';
+            return bytesPerSec.toFixed(0) + ' B/s';
+        }
+
+        // Render rows
+        function renderLogs() {
+            if (filteredLogs.length === 0) {
+                logsList.innerHTML = `
+                    <div class="empty-state">
+                        <span class="icon">🔍</span>
+                        <span>No logs matches filters</span>
+                    </div>`;
+                pagPrev.disabled = true;
+                pagNext.disabled = true;
+                pagInfo.textContent = 'Showing 0-0 of 0 entries';
+                return;
+            }
+
+            const totalItems = filteredLogs.length;
+            const totalPages = Math.ceil(totalItems / itemsPerPage);
+
+            if (currentPage < 1) currentPage = 1;
+            if (currentPage > totalPages) currentPage = totalPages;
+
+            const startIndex = (currentPage - 1) * itemsPerPage;
+            const endIndex = Math.min(startIndex + itemsPerPage, totalItems);
+
+            const displayItems = filteredLogs.slice(startIndex, endIndex);
+
+            logsList.innerHTML = displayItems.map((log, index) => {
+                const globalIndex = startIndex + index;
+                const timeStr = new Date(log.timestamp * 1000).toLocaleTimeString('en-US', {
+                    hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit'
+                });
+                
+                const scoreCol = getScoreColor(log.score);
+                const actionBadgeClass = log.action === 'BLOCK' ? 'badge-block' :
+                                         log.action === 'RATE_LIMIT' ? 'badge-rate-limit' : 'badge-allow';
+                
+                const protoNum = log.proto;
+                const protoName = protoNames[protoNum] || `IP (${protoNum})`;
+                const protoClass = protoName.toLowerCase();
+
+                const triggers = (log.triggered || []).map(t => {
+                    const severity = t.includes('flood') || t.includes('anomaly') ? 'severity-high' :
+                                     t.includes('scan') ? 'severity-medium' : 'severity-low';
+                    return `<span class="feed-type ${severity}">${t}</span>`;
+                }).join(' ');
+
+                // Formatted metric values
+                const pktRate = parseFloat(log.pkt_rate || 0).toFixed(1);
+                const byteRate = formatByteRate(log.byte_rate || 0);
+
+                // Feature details console string
+                const featureDetails = [
+                    { key: 'Source IP', val: log.src_ip },
+                    { key: 'Dest IP', val: log.dst_ip },
+                    { key: 'Dest Port', val: log.port },
+                    { key: 'Protocol ID', val: log.proto },
+                    { key: 'Packet Rate', val: pktRate + ' pps' },
+                    { key: 'Byte Rate', val: byteRate },
+                    { key: 'Unique Ports (30s)', val: log.unique_ports || 0 },
+                    { key: 'Port Entropy', val: parseFloat(log.port_entropy || 0).toFixed(3) }
+                ];
+
+                const detailConsoleLines = featureDetails.map(f => 
+                    `<div class="detail-console-line"><span class="detail-console-key">${f.key}:</span> <span class="detail-console-val">${f.val}</span></div>`
+                ).join('');
+
+                return `
+                <div class="log-row-container" data-index="${globalIndex}">
+                    <div class="log-data-row">
+                        <div class="log-col log-time">${timeStr}</div>
+                        <div class="log-col">
+                            <div class="log-flow-wrap">
+                                <span class="log-ip-badge">${log.src_ip}</span>
+                                <span class="log-flow-arrow">&rarr;</span>
+                                <span class="log-ip-badge">${log.dst_ip}</span>
+                                ${log.port ? `<span class="log-port">:${log.port}</span>` : ''}
+                            </div>
+                        </div>
+                        <div class="log-col">
+                            <span class="log-proto-badge ${protoClass}">${protoName}</span>
+                        </div>
+                        <div class="log-col">
+                            <div class="log-rate-wrap">
+                                <span class="log-rate-val">${pktRate} <span class="log-rate-lbl">pps</span></span>
+                                <span class="log-rate-val">${byteRate}</span>
+                            </div>
+                        </div>
+                        <div class="log-col log-score-val" style="color: ${scoreCol}">${Math.round(log.score)}</div>
+                        <div class="log-col">
+                            <span class="action-badge ${actionBadgeClass}">${log.action === 'RATE_LIMIT' ? 'RATE_LIMIT (Meter 1: 200 kbps)' : log.action}</span>
+                        </div>
+                        <div class="log-col log-triggered-tags">
+                            ${triggers || '<span style="color:var(--text-muted);font-size:0.7rem">None</span>'}
+                        </div>
+                    </div>
+                    
+                    <!-- Accordion collapsible details -->
+                    <div class="log-detail-tray">
+                        <div class="detail-grid">
+                            <div class="detail-column">
+                                <div class="detail-section-title">SDN Connection</div>
+                                <div class="detail-metric-card">
+                                    <div class="detail-metric-lbl">Flow Connection</div>
+                                    <div class="detail-metric-val" style="font-size:0.75rem">${log.src_ip} &rarr; ${log.dst_ip}</div>
+                                </div>
+                                <div class="detail-metric-card">
+                                    <div class="detail-metric-lbl">Destination Port</div>
+                                    <div class="detail-metric-val">${log.port || '—'}</div>
+                                </div>
+                            </div>
+                            <div class="detail-column">
+                                <div class="detail-section-title">ML Security Status</div>
+                                <div class="detail-metric-card">
+                                    <div class="detail-metric-lbl">Behavior Trust Score</div>
+                                    <div class="detail-metric-val" style="color:${scoreCol}">${parseFloat(log.score).toFixed(1)} / 100</div>
+                                </div>
+                                <div class="detail-metric-card">
+                                    <div class="detail-metric-lbl">Action Enforcement</div>
+                                    <div class="detail-metric-val">${log.action === 'RATE_LIMIT' ? 'RATE_LIMIT (Meter 1: 200 kbps)' : log.action}</div>
+                                </div>
+                            </div>
+                            <div class="detail-feature-console">
+                                <div class="detail-section-title" style="color:rgba(255,255,255,0.4);margin-bottom:8px">Extracted Ryu Flow Features</div>
+                                ${detailConsoleLines}
+                            </div>
+                        </div>
+                    </div>
+                </div>`;
+            }).join('');
+
+            // Update pagination buttons
+            pagPrev.disabled = currentPage === 1;
+            pagNext.disabled = currentPage === totalPages;
+            pagInfo.textContent = `Showing ${startIndex + 1}-${endIndex} of ${totalItems} entries`;
+        }
+
+        // Setup pagination buttons listeners
+        pagPrev.addEventListener('click', () => {
+            if (currentPage > 1) {
+                currentPage--;
+                renderLogs();
+            }
+        });
+
+        pagNext.addEventListener('click', () => {
+            const totalPages = Math.ceil(filteredLogs.length / itemsPerPage);
+            if (currentPage < totalPages) {
+                currentPage++;
+                renderLogs();
+            }
+        });
+
+        // Search & Filter listeners
+        searchInput.addEventListener('input', applyFilters);
+        filterAction.addEventListener('change', applyFilters);
+        filterProto.addEventListener('change', applyFilters);
+        filterSort.addEventListener('change', applyFilters);
+
+        // Reset click listener
+        resetBtn.addEventListener('click', () => {
+            if (confirm('Are you sure you want to clear the Ryu logs history? This resets metrics for all hosts.')) {
+                fetch('/reset', { method: 'POST' })
+                    .then(r => r.json())
+                    .then(res => {
+                        if (res.status === 'ok') {
+                            logsData = [];
+                            filteredLogs = [];
+                            updateStats();
+                            applyFilters();
+                        }
+                    })
+                    .catch(() => {});
+            }
+        });
+
+        // Click event delegation to handle accordion expansions
+        logsList.addEventListener('click', (e) => {
+            const row = e.target.closest('.log-data-row');
+            if (!row) return;
+
+            const container = row.closest('.log-row-container');
+            if (!container) return;
+
+            const isExpanded = container.classList.contains('expanded');
+            
+            // Collapse any other open containers first for neat accordion effect
+            document.querySelectorAll('.log-row-container.expanded').forEach(c => {
+                if (c !== container) c.classList.remove('expanded');
+            });
+
+            // Toggle selected row
+            container.classList.toggle('expanded', !isExpanded);
+        });
+
+        // Initial setup
+        fetchAllEvents();
+        fetchFlowStats();
+
+        // ── Background Network Constellation Animation ────────────────
+        const bgCanvas = document.getElementById('bg-network-canvas');
+        const bgCtx = bgCanvas.getContext('2d');
+        
+        let dots = [];
+        const NUM_DOTS = 48;
+        const MAX_DIST = 145;
+        
+        function initBgCanvas() {
+            bgCanvas.width = window.innerWidth;
+            bgCanvas.height = window.innerHeight;
+            dots = [];
+            for (let i = 0; i < NUM_DOTS; i++) {
+                dots.push({
+                    x: Math.random() * bgCanvas.width,
+                    y: Math.random() * bgCanvas.height,
+                    vx: (Math.random() - 0.5) * 0.45,
+                    vy: (Math.random() - 0.5) * 0.45,
+                    r: Math.random() * 2.5 + 2.5
+                });
+            }
+        }
+        
+        function drawBgNetwork() {
+            bgCtx.clearRect(0, 0, bgCanvas.width, bgCanvas.height);
+            
+            const isLight = document.body.classList.contains('light-theme');
+            
+            for (let i = 0; i < NUM_DOTS; i++) {
+                let d = dots[i];
+                d.x += d.vx;
+                d.y += d.vy;
+                
+                if (d.x < 0 || d.x > bgCanvas.width) d.vx *= -1;
+                if (d.y < 0 || d.y > bgCanvas.height) d.vy *= -1;
+                
+                bgCtx.fillStyle = isLight ? 'rgba(0, 0, 0, 0.25)' : 'rgba(255, 255, 255, 0.65)';
+                bgCtx.beginPath();
+                bgCtx.arc(d.x, d.y, d.r, 0, Math.PI * 2);
+                bgCtx.fill();
+            }
+            
+            for (let i = 0; i < NUM_DOTS; i++) {
+                for (let j = i + 1; j < NUM_DOTS; j++) {
+                    let d1 = dots[i];
+                    let d2 = dots[j];
+                    let dist = Math.hypot(d1.x - d2.x, d1.y - d2.y);
+                    if (dist < MAX_DIST) {
+                        let alpha = (1 - dist / MAX_DIST) * 0.42;
+                        bgCtx.strokeStyle = isLight ? `rgba(0, 0, 0, ${alpha * 0.4})` : `rgba(255, 255, 255, ${alpha})`;
+                        bgCtx.lineWidth = 1.3;
+                        bgCtx.beginPath();
+                        bgCtx.moveTo(d1.x, d1.y);
+                        bgCtx.lineTo(d2.x, d2.y);
+                        bgCtx.stroke();
+                    }
+                }
+            }
+            
+            requestAnimationFrame(drawBgNetwork);
+        }
+        
+        window.addEventListener('resize', initBgCanvas);
+        initBgCanvas();
+        drawBgNetwork();
+
+        // ── Theme Toggle Logic ─────────────────────────────────────
+        const themeBtn = document.getElementById('theme-toggle-btn');
+        const themeIcon = document.getElementById('theme-toggle-icon');
+
+        function applyTheme(theme) {
+            if (theme === 'light') {
+                document.body.classList.add('light-theme');
+                if (themeIcon) themeIcon.textContent = '🌙';
+            } else {
+                document.body.classList.remove('light-theme');
+                if (themeIcon) themeIcon.textContent = '☀️';
+            }
+        }
+
+        const savedTheme = localStorage.getItem('theme') || 'dark';
+        applyTheme(savedTheme);
+
+        if (themeBtn) {
+            themeBtn.addEventListener('click', () => {
+                const isLight = document.body.classList.contains('light-theme');
+                const targetTheme = isLight ? 'dark' : 'light';
+                localStorage.setItem('theme', targetTheme);
+                applyTheme(targetTheme);
+            });
+        }
+    </script>
+</body>
+</html>

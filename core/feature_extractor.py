@@ -68,4 +68,6 @@ class FlowFeatureExtractor:
             "unique_ports": unique_ports,
             "port_entropy": round(port_entropy, 4),
             "window_pkts":  total_pkts,
+            "is_response":  flow.get("is_response", False),
         }
+

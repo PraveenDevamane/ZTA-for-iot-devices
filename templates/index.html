@@ -9,6 +9,12 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.5/socket.io.min.js"></script>
 </head>
 <body>
+    <div class="bg-blobs-container">
+        <div class="blob blob-1"></div>
+        <div class="blob blob-2"></div>
+        <div class="blob blob-3"></div>
+        <canvas id="bg-network-canvas"></canvas>
+    </div>
     <div class="app-container">
         <!-- ═══ Header ═══ -->
         <header class="header glass-card" id="header-bar">
@@ -19,7 +25,14 @@
                     <div class="header-subtitle">Zero Trust IoT Security · Campus SDN</div>
                 </div>
             </div>
+            <nav class="header-nav">
+                <a href="/" class="nav-link active">Dashboard</a>
+                <a href="/logs" class="nav-link">SDN Logs</a>
+            </nav>
             <div class="header-status">
+                <button id="theme-toggle-btn" class="theme-toggle-small" title="Toggle Theme">
+                    <span id="theme-toggle-icon">☀️</span>
+                </button>
                 <div class="connection-badge offline" id="conn-badge">
                     <span class="status-dot"></span>
                     <span id="conn-text">Disconnected</span>
@@ -40,9 +53,20 @@
                 <div class="stat-value green" id="stat-hosts">0</div>
                 <div class="stat-sub">on campus network</div>
             </div>
-            <div class="stat-card glass-card amber">
+            <div class="stat-card glass-card gauge-card">
                 <div class="stat-label">Avg Trust Score</div>
-                <div class="stat-value amber" id="stat-avg">—</div>
+                <div class="gauge-container">
+                    <svg class="avg-trust-gauge-svg" viewBox="0 0 100 80">
+                        <!-- Background arc -->
+                        <path class="gauge-bg" d="M 15 65 A 40 40 0 1 1 85 65" fill="none" stroke="rgba(255, 255, 255, 0.08)" stroke-width="8" stroke-linecap="round"/>
+                        <!-- Foreground arc representing trust value -->
+                        <path class="gauge-fg" id="stat-avg-arc" d="M 15 65 A 40 40 0 1 1 85 65" fill="none" stroke="var(--accent-amber)" stroke-width="8" stroke-linecap="round" stroke-dasharray="188.5" stroke-dashoffset="188.5"/>
+                    </svg>
+                    <div class="gauge-info">
+                        <span class="gauge-val" id="stat-avg">—</span>
+                        <span class="gauge-badge" id="stat-avg-badge">—</span>
+                    </div>
+                </div>
                 <div class="stat-sub">across all hosts</div>
             </div>
             <div class="stat-card glass-card red">
@@ -60,8 +84,8 @@
                 <svg class="topology-svg" id="topo-svg" viewBox="0 0 520 380">
                     <!-- Core Switch (always visible) -->
                     <g class="topo-node" id="node-core">
-                        <rect x="238" y="20" width="44" height="44" rx="8"
-                              fill="rgba(108,124,255,0.2)" stroke="var(--accent-blue)" stroke-width="1.5"/>
+                        <rect x="238" y="20" width="44" height="44" rx="10"
+                              fill="rgba(0, 0, 0, 0.02)" stroke="var(--border-glow)" stroke-width="1.5"/>
                         <text x="260" y="44" fill="var(--text-primary)"
                               font-size="11" font-weight="600" text-anchor="middle">SDN</text>
                         <text x="260" y="76" fill="var(--text-muted)"
@@ -107,7 +131,20 @@
 
             <!-- Live Chart -->
             <div class="chart-panel glass-card">
-                <div class="panel-title"><span class="icon">📊</span> Live Flow Metrics</div>
+                <div class="panel-title">
+                    <span><span class="icon">📊</span> Live Flow Metrics</span>
+                    <div class="node-select-container">
+                        <select id="chart-node-select" class="glass-select">
+                            <option value="all">Overall Network</option>
+                            <option value="10.0.1.1">Host h1 (10.0.1.1)</option>
+                            <option value="10.0.1.2">Host h2 (10.0.1.2)</option>
+                            <option value="10.0.2.1">Host h3 (10.0.2.1)</option>
+                            <option value="10.0.2.2">Host h4 (10.0.2.2)</option>
+                            <option value="10.0.3.1">Host h5 (10.0.3.1)</option>
+                            <option value="10.0.3.2">Host h6 (10.0.3.2)</option>
+                        </select>
+                    </div>
+                </div>
                 <div class="chart-container">
                     <canvas id="live-chart"></canvas>
                 </div>
@@ -145,8 +182,43 @@
     // State
     let trustScores = {};        // ip → {score, action, triggered}
     let totalFlows = 0;
-    let chartData = { pktRate: [], trustScore: [], uniquePorts: [], labels: [] };
+    let globalChartData = { pktRate: [], trustScore: [], uniquePorts: [], labels: [] };
+    let nodeChartData = {};      // ip → { pktRate: [], trustScore: [], uniquePorts: [], labels: [] }
+    let currentSelectedNode = 'all';
     const MAX_CHART_POINTS = 60;
+
+    function updateChartDropdown() {
+        const select = document.getElementById('chart-node-select');
+        if (!select) return;
+        const currentValue = select.value;
+        const sortedHosts = Array.from(knownHosts).filter(ip => ip && ip !== '').sort();
+        
+        let html = '<option value="all">Overall Network</option>';
+        sortedHosts.forEach(ip => {
+            let hostName = ip;
+            if (ip.startsWith('10.')) {
+                const parts = ip.split('.');
+                const seg = parseInt(parts[2]);
+                const hostIdx = parseInt(parts[3]);
+                hostName = 'Host h' + ((seg - 1) * 2 + hostIdx) + ' (' + ip + ')';
+            }
+            html += `<option value="${ip}">${hostName}</option>`;
+        });
+        select.innerHTML = html;
+        // Keep previous selection if valid
+        if (Array.from(select.options).some(opt => opt.value === currentValue)) {
+            select.value = currentValue;
+        } else {
+            select.value = 'all';
+            currentSelectedNode = 'all';
+        }
+    }
+    
+    // Add dropdown listener
+    document.getElementById('chart-node-select').addEventListener('change', (e) => {
+        currentSelectedNode = e.target.value;
+        drawChart();
+    });
 
     // ── Connection handling ────────────────────────────────────
     socket.on('connect', () => {
@@ -168,6 +240,7 @@
                 trustScores[ip] = { score, action: scoreToAction(score), triggered: [] };
                 knownHosts.add(ip);
             });
+            updateChartDropdown();
             renderTrustList();
             renderTopology();
         }
@@ -192,6 +265,7 @@
                 if (ev.src_ip) knownHosts.add(ev.src_ip);
                 if (ev.dst_ip) knownHosts.add(ev.dst_ip);
             });
+            updateChartDropdown();
             renderTopology();
         }
     });
@@ -213,8 +287,13 @@
         let newHost = false;
         if (ev.src_ip && !knownHosts.has(ev.src_ip)) { knownHosts.add(ev.src_ip); newHost = true; }
         if (ev.dst_ip && !knownHosts.has(ev.dst_ip)) { knownHosts.add(ev.dst_ip); newHost = true; }
-        if (newHost) renderTopology();
-        else updateTopoNodeColor(ev.src_ip, ev.score);
+        
+        if (newHost) {
+            renderTopology();
+            updateChartDropdown();
+        } else {
+            updateTopoNodeColor(ev.src_ip, ev.score);
+        }
 
         // Pulse the active path
         pulseTopoPath(ev.src_ip, ev.dst_ip);
@@ -240,8 +319,10 @@
     socket.on('reset', () => {
         trustScores = {};
         totalFlows = 0;
-        chartData = { pktRate: [], trustScore: [], uniquePorts: [], labels: [] };
+        globalChartData = { pktRate: [], trustScore: [], uniquePorts: [], labels: [] };
+        nodeChartData = {};
         knownHosts = new Set(['10.0.1.1', '10.0.1.2', '10.0.2.1', '10.0.2.2', '10.0.3.1', '10.0.3.2']);
+        updateChartDropdown();
         renderTopology();
         document.getElementById('trust-list').innerHTML =
             '<div class="empty-state"><span class="icon">📡</span><span>Waiting for network flows…</span></div>';
@@ -318,8 +399,8 @@
         // Draw s0 (Core Switch)
         hostsG.innerHTML += `
             <g class="topo-node">
-                <rect x="${s0X-20}" y="${s0Y-20}" width="40" height="40" rx="6"
-                      fill="rgba(108,124,255,0.15)" stroke="var(--accent-blue)" stroke-width="1.2"/>
+                <rect x="${s0X-20}" y="${s0Y-20}" width="40" height="40" rx="8"
+                      fill="rgba(0, 0, 0, 0.02)" stroke="var(--border-glow)" stroke-width="1.2"/>
                 <text x="${s0X}" y="${s0Y+4}" fill="var(--text-primary)" font-size="9" font-weight="600" text-anchor="middle">s0</text>
                 <text x="${s0X}" y="${s0Y+30}" fill="var(--text-muted)" font-size="8" text-anchor="middle">CORE SW</text>
             </g>`;
@@ -343,7 +424,7 @@
 
         // Draw links to segment switches and draw the switches themselves
         Object.entries(swPositions).forEach(([id, pos]) => {
-            const fillCol = id === 's_ext' ? 'rgba(255,68,102,0.1)' : 'rgba(0,255,136,0.1)';
+            const fillCol = id === 's_ext' ? 'rgba(239, 68, 68, 0.05)' : 'rgba(16, 185, 129, 0.05)';
             const strokeCol = id === 's_ext' ? 'var(--accent-red)' : 'var(--accent-green)';
             
             // Draw link from s0 to segment switch
@@ -352,7 +433,7 @@
             // Draw switch node
             hostsG.innerHTML += `
                 <g class="topo-node">
-                    <rect x="${pos.x-20}" y="${pos.y-20}" width="40" height="40" rx="6"
+                    <rect x="${pos.x-20}" y="${pos.y-20}" width="40" height="40" rx="8"
                           fill="${fillCol}" stroke="${strokeCol}" stroke-width="1.2"/>
                     <text x="${pos.x}" y="${pos.y+4}" fill="var(--text-primary)" font-size="9" font-weight="600" text-anchor="middle">${pos.label}</text>
                     <text x="${pos.x}" y="${pos.y+30}" fill="var(--text-muted)" font-size="8" text-anchor="middle">${pos.sub}</text>
@@ -525,7 +606,7 @@
             <span class="feed-time">${time}</span>
             <span class="feed-ip">${ev.src_ip}</span>
             ${triggerHTML}
-            <span class="feed-action ${actionClass}">${ev.action}</span>
+            <span class="feed-action ${actionClass}">${ev.action === 'RATE_LIMIT' ? 'RATE_LIMIT (Meter 1: 200 kbps)' : ev.action}</span>
         `;
 
         feedList.insertBefore(div, feedList.firstChild);
@@ -560,8 +641,48 @@
     function updateStatsUI(flows, hosts, avg, blocks) {
         document.getElementById('stat-flows').textContent = flows;
         document.getElementById('stat-hosts').textContent = hosts;
-        document.getElementById('stat-avg').textContent = avg;
         document.getElementById('stat-blocks').textContent = blocks;
+        
+        // Update arched gauge
+        const avgVal = parseFloat(avg);
+        const avgTextEl = document.getElementById('stat-avg');
+        const avgBadgeEl = document.getElementById('stat-avg-badge');
+        const avgArcEl = document.getElementById('stat-avg-arc');
+        
+        if (isNaN(avgVal)) {
+            avgTextEl.textContent = '—';
+            avgBadgeEl.textContent = '—';
+            avgBadgeEl.style.background = 'rgba(255,255,255,0.08)';
+            avgBadgeEl.style.color = 'var(--text-secondary)';
+            avgArcEl.style.strokeDashoffset = '188.5';
+        } else {
+            avgTextEl.textContent = Math.round(avgVal);
+            
+            // Set badge level and colors
+            let level = 'SAFE';
+            let colorVar = 'var(--safe)';
+            let bgOpacityColor = 'rgba(16, 185, 129, 0.15)';
+            
+            if (avgVal < 35) {
+                level = 'CRITICAL';
+                colorVar = 'var(--danger)';
+                bgOpacityColor = 'rgba(239, 68, 68, 0.15)';
+            } else if (avgVal < 70) {
+                level = 'WARNING';
+                colorVar = 'var(--warning)';
+                bgOpacityColor = 'rgba(245, 158, 11, 0.15)';
+            }
+            
+            avgBadgeEl.textContent = level;
+            avgBadgeEl.style.color = colorVar;
+            avgBadgeEl.style.background = bgOpacityColor;
+            
+            // Update arc fill stroke and dashoffset
+            avgArcEl.style.stroke = colorVar;
+            const percentage = avgVal / 100;
+            const offset = 188.5 * (1 - percentage);
+            avgArcEl.style.strokeDashoffset = offset;
+        }
     }
 
     // ── Canvas Chart ───────────────────────────────────────────
@@ -569,19 +690,32 @@
     const ctx = chartCanvas.getContext('2d');
 
     function addChartPoint(ev) {
-        chartData.pktRate.push(ev.pkt_rate || 0);
-        chartData.trustScore.push(ev.score || 0);
-        chartData.uniquePorts.push(ev.unique_ports || 0);
-        chartData.labels.push('');
-
-        if (chartData.pktRate.length > MAX_CHART_POINTS) {
-            chartData.pktRate.shift();
-            chartData.trustScore.shift();
-            chartData.uniquePorts.shift();
-            chartData.labels.shift();
+        // Add to global data
+        addPointToDataset(globalChartData, ev);
+        
+        // Add to specific node data if src_ip is present
+        if (ev.src_ip) {
+            if (!nodeChartData[ev.src_ip]) {
+                nodeChartData[ev.src_ip] = { pktRate: [], trustScore: [], uniquePorts: [], labels: [] };
+            }
+            addPointToDataset(nodeChartData[ev.src_ip], ev);
         }
-
+        
         drawChart();
+    }
+
+    function addPointToDataset(dataset, ev) {
+        dataset.pktRate.push(ev.pkt_rate || 0);
+        dataset.trustScore.push(ev.score || 0);
+        dataset.uniquePorts.push(ev.unique_ports || 0);
+        dataset.labels.push('');
+
+        if (dataset.pktRate.length > MAX_CHART_POINTS) {
+            dataset.pktRate.shift();
+            dataset.trustScore.shift();
+            dataset.uniquePorts.shift();
+            dataset.labels.shift();
+        }
     }
 
     function drawChart() {
@@ -600,7 +734,8 @@
         ctx.clearRect(0, 0, W, H);
 
         // Grid lines
-        ctx.strokeStyle = 'rgba(100, 120, 255, 0.06)';
+        const isLight = document.body.classList.contains('light-theme');
+        ctx.strokeStyle = isLight ? 'rgba(0, 0, 0, 0.08)' : 'rgba(255, 255, 255, 0.06)';
         ctx.lineWidth = 1;
         for (let i = 0; i <= 4; i++) {
             const y = PAD_T + (plotH / 4) * i;
@@ -610,49 +745,82 @@
             ctx.stroke();
 
             // Y-axis labels
-            ctx.fillStyle = 'rgba(139, 143, 163, 0.6)';
+            ctx.fillStyle = isLight ? 'rgba(59, 58, 60, 0.9)' : 'rgba(165, 161, 156, 0.7)';
             ctx.font = '10px JetBrains Mono, monospace';
             ctx.textAlign = 'right';
             ctx.fillText(Math.round(100 - i * 25), PAD_L - 8, y + 4);
         }
 
-        const len = chartData.pktRate.length;
+        const activeData = currentSelectedNode === 'all' ? globalChartData : (nodeChartData[currentSelectedNode] || { pktRate: [], trustScore: [], uniquePorts: [], labels: [] });
+        const len = activeData.pktRate.length;
         if (len < 2) return;
 
         // Normalize: pktRate max dynamic, trustScore 0-100, uniquePorts max dynamic
-        const maxPkt = Math.max(...chartData.pktRate, 1);
-        const maxPorts = Math.max(...chartData.uniquePorts, 1);
+        const maxPkt = Math.max(...activeData.pktRate, 1);
+        const maxPorts = Math.max(...activeData.uniquePorts, 1);
 
         // Draw lines
         function drawLine(data, maxVal, color, alpha) {
+            const points = [];
+            for (let i = 0; i < data.length; i++) {
+                points.push({
+                    x: PAD_L + (plotW / (data.length - 1)) * i,
+                    y: PAD_T + plotH * (1 - data[i] / maxVal)
+                });
+            }
+
             ctx.beginPath();
             ctx.strokeStyle = color;
-            ctx.lineWidth = 2;
+            ctx.lineWidth = 2.5;
             ctx.lineJoin = 'round';
 
-            for (let i = 0; i < data.length; i++) {
-                const x = PAD_L + (plotW / (MAX_CHART_POINTS - 1)) * i;
-                const y = PAD_T + plotH * (1 - data[i] / maxVal);
-                if (i === 0) ctx.moveTo(x, y);
-                else ctx.lineTo(x, y);
+            // Quadratic curve spline rendering for smooth lines
+            ctx.moveTo(points[0].x, points[0].y);
+            
+            if (points.length === 2) {
+                ctx.lineTo(points[1].x, points[1].y);
+            } else {
+                let i = 1;
+                for (i = 1; i < points.length - 2; i++) {
+                    const xc = (points[i].x + points[i + 1].x) / 2;
+                    const yc = (points[i].y + points[i + 1].y) / 2;
+                    ctx.quadraticCurveTo(points[i].x, points[i].y, xc, yc);
+                }
+                ctx.quadraticCurveTo(points[i].x, points[i].y, points[i + 1].x, points[i + 1].y);
             }
             ctx.stroke();
 
-            // Gradient fill
+            // Gradient fill matching the smooth curve path
             const grad = ctx.createLinearGradient(0, PAD_T, 0, PAD_T + plotH);
             grad.addColorStop(0, color.replace(')', `, ${alpha})`).replace('rgb', 'rgba'));
             grad.addColorStop(1, 'rgba(0,0,0,0)');
 
-            ctx.lineTo(PAD_L + (plotW / (MAX_CHART_POINTS - 1)) * (data.length - 1), PAD_T + plotH);
-            ctx.lineTo(PAD_L, PAD_T + plotH);
+            // Construct fill path by repeating the smooth curve in reverse direction for clipping/clamping to bottom
+            ctx.beginPath();
+            ctx.moveTo(points[0].x, points[0].y);
+            
+            if (points.length === 2) {
+                ctx.lineTo(points[1].x, points[1].y);
+            } else {
+                let i = 1;
+                for (i = 1; i < points.length - 2; i++) {
+                    const xc = (points[i].x + points[i + 1].x) / 2;
+                    const yc = (points[i].y + points[i + 1].y) / 2;
+                    ctx.quadraticCurveTo(points[i].x, points[i].y, xc, yc);
+                }
+                ctx.quadraticCurveTo(points[i].x, points[i].y, points[i + 1].x, points[i + 1].y);
+            }
+            
+            ctx.lineTo(points[points.length - 1].x, PAD_T + plotH);
+            ctx.lineTo(points[0].x, PAD_T + plotH);
             ctx.closePath();
             ctx.fillStyle = grad;
             ctx.fill();
         }
 
-        drawLine(chartData.pktRate, maxPkt, 'rgb(0, 212, 255)', 0.08);
-        drawLine(chartData.trustScore, 100, 'rgb(0, 255, 136)', 0.06);
-        drawLine(chartData.uniquePorts, maxPorts, 'rgb(255, 68, 102)', 0.05);
+        drawLine(activeData.pktRate, maxPkt, 'rgb(6, 182, 212)', 0.08);
+        drawLine(activeData.trustScore, 100, 'rgb(16, 185, 129)', 0.06);
+        drawLine(activeData.uniquePorts, maxPorts, 'rgb(239, 68, 68)', 0.05);
     }
 
     // Redraw on resize
@@ -662,7 +830,102 @@
     drawChart();
     renderTopology();
 
+    // Background Network Constellation Animation
+    const bgCanvas = document.getElementById('bg-network-canvas');
+    const bgCtx = bgCanvas.getContext('2d');
+    
+    let dots = [];
+    const NUM_DOTS = 48;
+    const MAX_DIST = 145; // larger distance for somewhat big mesh structures
+    
+    function initBgCanvas() {
+        bgCanvas.width = window.innerWidth;
+        bgCanvas.height = window.innerHeight;
+        dots = [];
+        for (let i = 0; i < NUM_DOTS; i++) {
+            dots.push({
+                x: Math.random() * bgCanvas.width,
+                y: Math.random() * bgCanvas.height,
+                vx: (Math.random() - 0.5) * 0.45, // slightly faster flow
+                vy: (Math.random() - 0.5) * 0.45,
+                r: Math.random() * 2.5 + 2.5 // somewhat bigger dots (2.5px to 5px radius)
+            });
+        }
+    }
+    
+    function drawBgNetwork() {
+        bgCtx.clearRect(0, 0, bgCanvas.width, bgCanvas.height);
+        
+        const isLight = document.body.classList.contains('light-theme');
+        
+        // Update and draw dots
+        for (let i = 0; i < NUM_DOTS; i++) {
+            let d = dots[i];
+            d.x += d.vx;
+            d.y += d.vy;
+            
+            if (d.x < 0 || d.x > bgCanvas.width) d.vx *= -1;
+            if (d.y < 0 || d.y > bgCanvas.height) d.vy *= -1;
+            
+            bgCtx.fillStyle = isLight ? 'rgba(0, 0, 0, 0.25)' : 'rgba(255, 255, 255, 0.65)'; // clearer dots
+            bgCtx.beginPath();
+            bgCtx.arc(d.x, d.y, d.r, 0, Math.PI * 2);
+            bgCtx.fill();
+        }
+        
+        // Draw lines between close dots
+        for (let i = 0; i < NUM_DOTS; i++) {
+            for (let j = i + 1; j < NUM_DOTS; j++) {
+                let d1 = dots[i];
+                let d2 = dots[j];
+                let dist = Math.hypot(d1.x - d2.x, d1.y - d2.y);
+                if (dist < MAX_DIST) {
+                    let alpha = (1 - dist / MAX_DIST) * 0.42; // clearer, higher opacity lines
+                    bgCtx.strokeStyle = isLight ? `rgba(0, 0, 0, ${alpha * 0.4})` : `rgba(255, 255, 255, ${alpha})`;
+                    bgCtx.lineWidth = 1.3; // thicker lines for visual clarity
+                    bgCtx.beginPath();
+                    bgCtx.moveTo(d1.x, d1.y);
+                    bgCtx.lineTo(d2.x, d2.y);
+                    bgCtx.stroke();
+                }
+            }
+        }
+        
+        requestAnimationFrame(drawBgNetwork);
+    }
+    
+    window.addEventListener('resize', initBgCanvas);
+    initBgCanvas();
+    drawBgNetwork();
 
+    // ── Theme Toggle Logic ─────────────────────────────────────
+    const themeBtn = document.getElementById('theme-toggle-btn');
+    const themeIcon = document.getElementById('theme-toggle-icon');
+
+    function applyTheme(theme) {
+        if (theme === 'light') {
+            document.body.classList.add('light-theme');
+            if (themeIcon) themeIcon.textContent = '🌙';
+        } else {
+            document.body.classList.remove('light-theme');
+            if (themeIcon) themeIcon.textContent = '☀️';
+        }
+        if (typeof drawChart === 'function') {
+            drawChart();
+        }
+    }
+
+    const savedTheme = localStorage.getItem('theme') || 'dark';
+    applyTheme(savedTheme);
+
+    if (themeBtn) {
+        themeBtn.addEventListener('click', () => {
+            const isLight = document.body.classList.contains('light-theme');
+            const targetTheme = isLight ? 'dark' : 'light';
+            localStorage.setItem('theme', targetTheme);
+            applyTheme(targetTheme);
+        });
+    }
     </script>
 </body>
 </html>

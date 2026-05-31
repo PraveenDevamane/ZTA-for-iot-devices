@@ -10,9 +10,19 @@ Flask + SocketIO backend that:
 import eventlet
 eventlet.monkey_patch()
 
+import warnings
+try:
+    from sklearn.exceptions import InconsistentVersionWarning
+    warnings.filterwarnings("ignore", category=InconsistentVersionWarning)
+except ImportError:
+    pass
+warnings.filterwarnings("ignore", category=UserWarning, module="sklearn")
+warnings.filterwarnings("ignore", category=UserWarning, module="joblib")
+
 from flask import Flask, request, jsonify, render_template
 from flask_socketio import SocketIO
 from core import FlowFeatureExtractor, TrustEngine
+
 import time, json, os
 
 # ── App setup ───────────────────────────────────────────────────────────
@@ -34,6 +44,11 @@ MAX_EVENTS = 200
 @app.route("/")
 def dashboard():
     return render_template("index.html")
+
+
+@app.route("/logs")
+def logs():
+    return render_template("logs.html")
 
 
 # ── REST API (called by Ryu controller) ─────────────────────────────────
@@ -103,6 +118,12 @@ def stats():
 def events():
     """Return recent events for initial dashboard load."""
     return jsonify(_event_log[-50:])
+
+
+@app.route("/all_events", methods=["GET"])
+def all_events():
+    """Return all stored events for the logs page."""
+    return jsonify(_event_log)
 
 
 @app.route("/model_info", methods=["GET"])
