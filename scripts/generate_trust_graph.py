@@ -15,7 +15,6 @@ def simulate_trust_timeline():
     for t in timeline:
         # Phase 1: Normal Traffic (0s to 10s)
         if 0 <= t <= 10:
-            # Benign traffic keeps score at baseline
             current_score = 100.0
             
         # Phase 2: ICMP Flood Starts (11s to 25s)
@@ -50,20 +49,20 @@ def simulate_trust_timeline():
     plt.figure(figsize=(11, 6))
     fig, ax = plt.subplots(figsize=(11, 6.2))
     
-    # Draw Background Policy Zones
-    # BLOCK Zone (0 to 30) - Light Red
-    ax.axhspan(0, 30, color="#f9ebd2", alpha=0.5, label="BLOCK (Isolation)")
-    # RATE_LIMIT Zone (30 to 70) - Light Yellow/Orange
-    ax.axhspan(30, 70, color="#fef9e7", alpha=0.6, label="RATE_LIMIT (QoS)")
-    # ALLOW Zone (70 to 100) - Light Green
-    ax.axhspan(70, 100, color="#e8f8f5", alpha=0.6, label="ALLOW (Benign)")
+    # Draw Background Policy Zones (Updated thresholds: 80 and 40)
+    # BLOCK Zone (0 to 40) - Light Red
+    ax.axhspan(0, 40, color="#f9ebd2", alpha=0.5, label="BLOCK (Isolation)")
+    # RATE_LIMIT Zone (40 to 80) - Light Yellow/Orange
+    ax.axhspan(40, 80, color="#fef9e7", alpha=0.6, label="RATE_LIMIT (QoS)")
+    # ALLOW Zone (80 to 100) - Light Green
+    ax.axhspan(80, 100, color="#e8f8f5", alpha=0.6, label="ALLOW (Benign)")
     
     # Plot trust score line
     ax.plot(timeline, scores, color="#2c3e50", linewidth=2.5, marker="o", markersize=4, label="Trust Score (T)", zorder=4)
     
     # Threshold Lines
-    ax.axhline(70, color="#1abc9c", linestyle="--", linewidth=1.2, alpha=0.8, zorder=2)
-    ax.axhline(30, color="#e67e22", linestyle="--", linewidth=1.2, alpha=0.8, zorder=2)
+    ax.axhline(80, color="#1abc9c", linestyle="--", linewidth=1.2, alpha=0.8, zorder=2)
+    ax.axhline(40, color="#e67e22", linestyle="--", linewidth=1.2, alpha=0.8, zorder=2)
     
     # Annotations for Events
     ax.annotate("Normal Ping\n(T = 100)", xy=(5, 100), xytext=(5, 80),
@@ -81,7 +80,7 @@ def simulate_trust_timeline():
     ax.annotate("Port Scan\n-40 Scan, -20 Entropy\n(T -> 0)", xy=(31, 0), xytext=(28, 18),
                 arrowprops=dict(arrowstyle="->", color="#e74c3c", lw=1.5), ha="center", color="#c0392b", fontweight="bold", fontsize=9)
                 
-    ax.annotate("Final Recovery\nRe-enters ALLOW", xy=(48, 75), xytext=(48, 55),
+    ax.annotate("Final Recovery\nRe-enters ALLOW", xy=(55, 81), xytext=(48, 60),
                 arrowprops=dict(arrowstyle="->", color="#27ae60"), ha="center", color="#27ae60", fontweight="bold", fontsize=9)
                 
     # Labels and Titles
@@ -100,9 +99,9 @@ def simulate_trust_timeline():
     plt.tight_layout()
     
     # Save path
-    artifact_dir = "/Users/praveenkumardevamane/.gemini/antigravity/brain/5ef31cc6-79d2-4276-8bbe-15d49fffe107"
-    os.makedirs(artifact_dir, exist_ok=True)
-    save_path = os.path.join(artifact_dir, "trust_score_timeline.png")
+    reports_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "reports")
+    os.makedirs(reports_dir, exist_ok=True)
+    save_path = os.path.join(reports_dir, "trust_score_timeline_legacy.png")
     plt.savefig(save_path, dpi=300, bbox_inches="tight")
     print(f"Trust score graph saved successfully at: {save_path}")
 

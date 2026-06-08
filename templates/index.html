@@ -97,9 +97,9 @@
                     <g id="topo-hosts"></g>
                 </svg>
                 <div class="topo-legend" style="display:flex;gap:12px;padding:6px 12px;font-size:0.7rem;color:var(--text-muted)">
-                    <span><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:var(--safe);margin-right:4px"></span>Safe (≥70)</span>
+                    <span><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:var(--safe);margin-right:4px"></span>Safe (≥80)</span>
                     <span><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:var(--warning);margin-right:4px"></span>Rate Limited</span>
-                    <span><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:var(--danger);margin-right:4px"></span>Blocked (<30)</span>
+                    <span><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:var(--danger);margin-right:4px"></span>Blocked (<40)</span>
                 </div>
             </div>
 
@@ -150,15 +150,15 @@
                 </div>
                 <div class="chart-legend">
                     <div class="legend-item">
-                        <span class="legend-dot" style="background:var(--accent-cyan)"></span>
+                        <span class="legend-dot" style="background:rgb(6, 182, 212)"></span>
                         Packet Rate
                     </div>
                     <div class="legend-item">
-                        <span class="legend-dot" style="background:var(--accent-green)"></span>
+                        <span class="legend-dot" style="background:rgb(16, 185, 129)"></span>
                         Trust Score
                     </div>
                     <div class="legend-item">
-                        <span class="legend-dot" style="background:var(--accent-red)"></span>
+                        <span class="legend-dot" style="background:rgb(239, 68, 68)"></span>
                         Unique Ports
                     </div>
                 </div>
@@ -333,14 +333,14 @@
 
     // ── Helper: score → action ─────────────────────────────────
     function scoreToAction(score) {
-        if (score >= 70) return 'ALLOW';
-        if (score >= 30) return 'RATE_LIMIT';
+        if (score >= 80) return 'ALLOW';
+        if (score >= 40) return 'RATE_LIMIT';
         return 'BLOCK';
     }
 
     function scoreColor(score) {
-        if (score >= 70) return 'var(--safe)';
-        if (score >= 30) return 'var(--warning)';
+        if (score >= 80) return 'var(--safe)';
+        if (score >= 40) return 'var(--warning)';
         return 'var(--danger)';
     }
 
@@ -477,7 +477,7 @@
             ips.forEach((ip, i) => {
                 const x = startX + i * spacing;
                 const score = trustScores[ip] ? trustScores[ip].score : null;
-                const cls = score === null ? 'node-idle' : (score >= 70 ? 'node-safe' : score >= 30 ? 'node-warning' : 'node-danger');
+                const cls = score === null ? 'node-idle' : (score >= 80 ? 'node-safe' : score >= 40 ? 'node-warning' : 'node-danger');
                 const scoreStr = score === null ? '—' : Math.round(score);
                 const scoreCol = score === null ? 'var(--text-muted)' : scoreColor(score);
                 
@@ -520,8 +520,8 @@
         const circle = node.querySelector('circle');
         if (circle) {
             circle.classList.remove('node-idle', 'node-safe', 'node-warning', 'node-danger');
-            if (score >= 70) circle.classList.add('node-safe');
-            else if (score >= 30) circle.classList.add('node-warning');
+            if (score >= 80) circle.classList.add('node-safe');
+            else if (score >= 40) circle.classList.add('node-warning');
             else circle.classList.add('node-danger');
         }
         const textLabel = node.querySelector('.score-label');
@@ -606,7 +606,7 @@
             <span class="feed-time">${time}</span>
             <span class="feed-ip">${ev.src_ip}</span>
             ${triggerHTML}
-            <span class="feed-action ${actionClass}">${ev.action === 'RATE_LIMIT' ? 'RATE_LIMIT (Meter 1: 200 kbps)' : ev.action}</span>
+            <span class="feed-action ${actionClass}">${ev.action === 'RATE_LIMIT' ? 'RATE_LIMIT (Meter 1: 25 Mbps)' : ev.action}</span>
         `;
 
         feedList.insertBefore(div, feedList.firstChild);
@@ -660,25 +660,25 @@
             
             // Set badge level and colors
             let level = 'SAFE';
-            let colorVar = 'var(--safe)';
-            let bgOpacityColor = 'rgba(16, 185, 129, 0.15)';
+            let colorVar = 'var(--text-primary)';
+            let bgColor = 'rgba(255, 255, 255, 0.08)';
             
-            if (avgVal < 35) {
+            if (avgVal < 40) {
                 level = 'CRITICAL';
-                colorVar = 'var(--danger)';
-                bgOpacityColor = 'rgba(239, 68, 68, 0.15)';
-            } else if (avgVal < 70) {
+                colorVar = 'var(--bg-primary)';
+                bgColor = 'var(--text-primary)';
+            } else if (avgVal < 80) {
                 level = 'WARNING';
-                colorVar = 'var(--warning)';
-                bgOpacityColor = 'rgba(245, 158, 11, 0.15)';
+                colorVar = 'var(--text-muted)';
+                bgColor = 'rgba(128, 128, 128, 0.15)';
             }
             
             avgBadgeEl.textContent = level;
             avgBadgeEl.style.color = colorVar;
-            avgBadgeEl.style.background = bgOpacityColor;
+            avgBadgeEl.style.background = bgColor;
             
             // Update arc fill stroke and dashoffset
-            avgArcEl.style.stroke = colorVar;
+            avgArcEl.style.stroke = colorVar === 'var(--bg-primary)' ? 'var(--text-primary)' : colorVar;
             const percentage = avgVal / 100;
             const offset = 188.5 * (1 - percentage);
             avgArcEl.style.strokeDashoffset = offset;
@@ -734,8 +734,7 @@
         ctx.clearRect(0, 0, W, H);
 
         // Grid lines
-        const isLight = document.body.classList.contains('light-theme');
-        ctx.strokeStyle = isLight ? 'rgba(0, 0, 0, 0.08)' : 'rgba(255, 255, 255, 0.06)';
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.06)';
         ctx.lineWidth = 1;
         for (let i = 0; i <= 4; i++) {
             const y = PAD_T + (plotH / 4) * i;
@@ -745,7 +744,7 @@
             ctx.stroke();
 
             // Y-axis labels
-            ctx.fillStyle = isLight ? 'rgba(59, 58, 60, 0.9)' : 'rgba(165, 161, 156, 0.7)';
+            ctx.fillStyle = 'rgba(165, 161, 156, 0.7)';
             ctx.font = '10px JetBrains Mono, monospace';
             ctx.textAlign = 'right';
             ctx.fillText(Math.round(100 - i * 25), PAD_L - 8, y + 4);

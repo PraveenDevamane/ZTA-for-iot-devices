@@ -132,23 +132,35 @@ class TrustEngine:
        
         ml_label = "normal"
         if self._model and not is_response:
-            vec = np.array([[
-                features.get("pkt_rate", 0),
-                features.get("byte_rate", 0),
-                features.get("unique_ports", 0),
-                features.get("port_entropy", 0),
-            ]], dtype=np.float64)
+            # Map features to the 4 trained columns: ['Rate', 'Srate', 'Protocol Type', 'Variance']
+            proto_val = features.get("proto", 6)
+            try:
+                proto_val = float(proto_val)
+            except (ValueError, TypeError):
+                proto_val = 6.0
 
-            # Always scale if scaler exists — no pandas dependency
-            if self._scaler is not None:
-                vec = self._scaler.transform(vec)
+            # Skip ML scoring for ICMP (proto == 1) because the unsupervised Isolation Forest
+            # flags rare benign ICMP traffic as an anomaly due to its protocol minority status.
+            if proto_val == 1.0:
+                pass
+            else:
+                vec = np.array([[
+                    features.get("pkt_rate", 0.0),
+                    features.get("byte_rate", 0.0),
+                    proto_val,
+                    features.get("pkt_size_variance", 0.0),
+                ]], dtype=np.float64)
 
-            # decision_function: negative = anomalous, positive = normal
-            ml_score = self._model.decision_function(vec)[0]
-            if ml_score < -0.26:
-                score -= 30
-                ml_label = f"ml_anomaly({ml_score:.3f})"
-                triggered.append(ml_label)
+                # Always scale if scaler exists — no pandas dependency
+                if self._scaler is not None:
+                    vec = self._scaler.transform(vec)
+
+                # decision_function: negative = anomalous, positive = normal
+                ml_score = self._model.decision_function(vec)[0]
+                if ml_score < -0.26:
+                    score -= 30
+                    ml_label = f"ml_anomaly({ml_score:.3f})"
+                    triggered.append(ml_label)
 
 
         if not triggered:
@@ -212,6 +224,6 @@ class TrustEngine:
 
     @staticmethod
     def _action(score: float) -> str:
-        if score >= 70: return "ALLOW"
-        if score >= 30: return "RATE_LIMIT"
+        if score >= 80: return "ALLOW"
+        if score >= 40: return "RATE_LIMIT"
         return "BLOCK"

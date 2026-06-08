@@ -145,8 +145,8 @@ class BAZTAController(app_manager.OSKenApp):
                                           ofproto.OFPCML_NO_BUFFER)]
         self._add_flow(dp, priority=0, match=match, actions=actions)
 
-        # Configure Meter 1 for rate limiting (e.g. rate = 200 kbps, drop if exceeded)
-        self._create_meter(dp, meter_id=1, rate_kbps=200)
+        # Configure Meter 1 for rate limiting (e.g. rate = 25 Mbps, drop if exceeded)
+        self._create_meter(dp, meter_id=1, rate_kbps=25000)
 
         sw = get_switch_name(dp.id)
         self.logger.info("Switch Connected: %s (dpid=%s)", sw, dp.id)
@@ -174,32 +174,49 @@ class BAZTAController(app_manager.OSKenApp):
         self.mac_to_port.setdefault(dpid, {})
         self.mac_to_port[dpid][eth.src] = in_port
 
-        # Only process IP traffic for trust scoring
+        # Only process IP traffic for trust scoring on the local access switch
         if ip_pkt:
-            flow_data = self._build_flow_record(ip_pkt, tcp_pkt, udp_pkt, pkt)
-            result    = self._query_trust_api(flow_data)
+            src_ip = ip_pkt.src
+            
+            # Determine if this switch is the local access switch for the src_ip
+            # h1 (10.0.1.1) and h2 (10.0.1.2) -> s1 (dpid 2)
+            # h3 (10.0.2.1) and h4 (10.0.2.2) -> s2 (dpid 3)
+            # h5 (10.0.3.1) and h6 (10.0.3.2) -> s3 (dpid 4)
+            # Core switch s0 (dpid 1) is never an access switch.
+            is_local = False
+            parts = src_ip.split('.')
+            if len(parts) >= 3 and parts[0] == '10':
+                try:
+                    seg = int(parts[2])
+                    if dpid == seg + 1:
+                        is_local = True
+                except ValueError:
+                    pass
 
-            if result:
-                action = result.get("action", "ALLOW")
-                score  = result.get("trust_score", 100)
-                src_ip = ip_pkt.src
-                dst_ip = ip_pkt.dst
+            if is_local:
+                flow_data = self._build_flow_record(ip_pkt, tcp_pkt, udp_pkt, pkt)
+                result    = self._query_trust_api(flow_data)
 
-                sw = get_switch_name(dpid)
-                triggered_str = ", ".join(result.get("triggered", [])) if result.get("triggered") else "None"
-                path_str = get_flow_path(src_ip, dst_ip)
-                
-                if not flow_data.get("is_response", False):
-                    self.logger.info(
-                        "[%s] [FLOW_MONITOR] [%s] [%s] [Score: %d] [%s] [Triggers: %s]",
-                        get_log_time(), sw, path_str, int(score), action, triggered_str
-                    )
+                if result:
+                    action = result.get("action", "ALLOW")
+                    score  = result.get("trust_score", 100)
+                    dst_ip = ip_pkt.dst
 
-                    if action == "BLOCK":
-                        self._install_block_rule(dp, parser, src_ip, dst_ip, int(score), triggered_str)
-                        return  # drop this packet too
-                    elif action == "RATE_LIMIT":
-                        self._install_rate_limit_rule(dp, parser, src_ip, dst_ip, int(score), triggered_str)
+                    sw = get_switch_name(dpid)
+                    triggered_str = ", ".join(result.get("triggered", [])) if result.get("triggered") else "None"
+                    path_str = get_flow_path(src_ip, dst_ip)
+                    
+                    if not flow_data.get("is_response", False):
+                        self.logger.info(
+                            "[%s] [FLOW_MONITOR] [%s] [%s] [Score: %d] [%s] [Triggers: %s]",
+                            get_log_time(), sw, path_str, int(score), action, triggered_str
+                        )
+
+                        if action == "BLOCK":
+                            self._install_block_rule(dp, parser, src_ip, dst_ip, int(score), triggered_str)
+                            return  # drop this packet too
+                        elif action == "RATE_LIMIT":
+                            self._install_rate_limit_rule(dp, parser, src_ip, dst_ip, int(score), triggered_str)
 
 
         # Normal L2 forwarding

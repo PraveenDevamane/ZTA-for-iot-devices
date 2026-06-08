@@ -245,8 +245,8 @@
 
         // Action score color
         function getScoreColor(score) {
-            if (score >= 70) return 'var(--safe)';
-            if (score >= 30) return 'var(--warning)';
+            if (score >= 80) return 'var(--safe)';
+            if (score >= 40) return 'var(--warning)';
             return 'var(--danger)';
         }
 
@@ -421,7 +421,7 @@
                         </div>
                         <div class="log-col log-score-val" style="color: ${scoreCol}">${Math.round(log.score)}</div>
                         <div class="log-col">
-                            <span class="action-badge ${actionBadgeClass}">${log.action === 'RATE_LIMIT' ? 'RATE_LIMIT (Meter 1: 200 kbps)' : log.action}</span>
+                            <span class="action-badge ${actionBadgeClass}">${log.action === 'RATE_LIMIT' ? 'RATE_LIMIT (Meter 1: 25 Mbps)' : log.action}</span>
                         </div>
                         <div class="log-col log-triggered-tags">
                             ${triggers || '<span style="color:var(--text-muted);font-size:0.7rem">None</span>'}
@@ -450,7 +450,7 @@
                                 </div>
                                 <div class="detail-metric-card">
                                     <div class="detail-metric-lbl">Action Enforcement</div>
-                                    <div class="detail-metric-val">${log.action === 'RATE_LIMIT' ? 'RATE_LIMIT (Meter 1: 200 kbps)' : log.action}</div>
+                                    <div class="detail-metric-val">${log.action === 'RATE_LIMIT' ? 'RATE_LIMIT (Meter 1: 25 Mbps)' : log.action}</div>
                                 </div>
                             </div>
                             <div class="detail-feature-console">

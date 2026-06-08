@@ -59,15 +59,24 @@ class FlowFeatureExtractor:
         else:
             elapsed = 1.0
 
+        # Calculate packet size variance over the rolling window (for ML 'Variance' feature)
+        sizes = [b for _, _, b in self._pkt_log[src]]
+        if len(sizes) > 1:
+            mean = sum(sizes) / len(sizes)
+            variance = sum((x - mean) ** 2 for x in sizes) / len(sizes)
+        else:
+            variance = 0.0
+
         return {
-            "src_ip":       src,
-            "dst_ip":       flow["dst_ip"],
-            "proto":        flow["proto"],
-            "pkt_rate":     round(total_pkts / elapsed, 2),
-            "byte_rate":    round(total_bytes / elapsed, 2),
-            "unique_ports": unique_ports,
-            "port_entropy": round(port_entropy, 4),
-            "window_pkts":  total_pkts,
-            "is_response":  flow.get("is_response", False),
+            "src_ip":            src,
+            "dst_ip":            flow["dst_ip"],
+            "proto":             flow["proto"],
+            "pkt_rate":          round(total_pkts / elapsed, 2),
+            "byte_rate":         round(total_bytes / elapsed, 2),
+            "unique_ports":      unique_ports,
+            "port_entropy":      round(port_entropy, 4),
+            "pkt_size_variance": round(variance, 4),
+            "window_pkts":       total_pkts,
+            "is_response":       flow.get("is_response", False),
         }
 

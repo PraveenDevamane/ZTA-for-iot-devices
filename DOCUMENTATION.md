@@ -46,9 +46,9 @@ If the extracted flow features breach predefined thresholds, immediate point ded
 ### Network Actions based on Trust Score
 The accumulated trust score translates directly into automated SDN actions:
 
-* 🟢 **ALLOW (Score ≥ 70):** The traffic is deemed benign. The SDN controller permits the packet flow.
-* 🟡 **RATE_LIMIT (Score 30 - 69):** Suspicious behavior is flagged. The controller applies QoS/Meter tables to rate-limit the device's traffic throughput.
-* 🔴 **BLOCK (Score < 30):** The device is deemed compromised. A hard OpenFlow `DROP` rule is installed, entirely isolating the node from lateral movement.
+* 🟢 **ALLOW (Score ≥ 80):** The traffic is deemed benign. The SDN controller permits the packet flow at full link speed (100 Mbps).
+* 🟡 **RATE_LIMIT (Score 40 - 79):** Suspicious behavior is flagged. The controller applies QoS/Meter tables to rate-limit the device's traffic throughput to 25 Mbps.
+* 🔴 **BLOCK (Score < 40):** The device is deemed compromised. A hard OpenFlow `DROP` rule is installed, entirely isolating the node (0 Mbps) from lateral movement.
 
 ---
 
