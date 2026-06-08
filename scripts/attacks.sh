@@ -54,36 +54,24 @@ case "$ACTION" in
         echo "[DONE] Byte flood stopped."
         ;;
 
-    full_demo)
-        echo "═══════════════════════════════════════════"
-        echo "  BAZTA Full Demo Scenario"
-        echo "  Target: $TARGET"
-        echo "═══════════════════════════════════════════"
-        echo ""
+    covert_channel)
+        echo "[ATTACK] Covert Channel (Extreme Size Variance) → $TARGET"
+        echo "         (15 pps, alternating 78-byte and 1428-byte packets)"
+        END_TIME=$((SECONDS + 30))
+        while [ $SECONDS -lt $END_TIME ]; do
+            hping3 -2 -c 1 -d 50 -p 8080 "$TARGET" >/dev/null 2>&1 || true
+            sleep 0.06
+            hping3 -2 -c 1 -d 1400 -p 8080 "$TARGET" >/dev/null 2>&1 || true
+            sleep 0.06
+        done
+        echo "[DONE] Covert channel stopped."
+        ;;
 
-        echo "[1/4] Normal traffic (ping for 10s)..."
-        ping -c 10 -i 1 "$TARGET" >/dev/null 2>&1 || true
-        echo "      ✓ Normal phase done"
-        sleep 2
-
-        echo "[2/4] ICMP Flood attack (15s)..."
-        timeout 15 hping3 -1 -i u1000 --icmp "$TARGET" >/dev/null 2>&1 || true
-        echo "      ✓ ICMP flood done — check dashboard for BLOCK"
-        sleep 5
-
-        echo "[3/4] Port Scan attack..."
-        nmap "${NMAP_FAST_FLAGS[@]}" --top-ports "$SCAN_PORTS" "$TARGET" >/dev/null 2>&1 || true
-        echo "      ✓ Port scan done — check dashboard for detection"
-        sleep 5
-
-        echo "[4/4] Recovery period (normal ping 15s)..."
-        ping -c 15 -i 1 "$TARGET" >/dev/null 2>&1 || true
-        echo "      ✓ Recovery done — trust score should climb back"
-
-        echo ""
-        echo "═══════════════════════════════════════════"
-        echo "  Demo complete! Check the dashboard."
-        echo "═══════════════════════════════════════════"
+    atypical_proto)
+        echo "[ATTACK] Atypical Protocol Communication (GRE) → $TARGET"
+        echo "         (5 pps, 80-byte packets, IP Proto 47)"
+        timeout 30 hping3 --rawip -H 47 -d 60 -i u200000 "$TARGET" 2>/dev/null || true
+        echo "[DONE] Atypical protocol stopped."
         ;;
 
     help|*)
@@ -91,13 +79,14 @@ case "$ACTION" in
         echo "Usage: bash attacks.sh <action> <target_ip>"
         echo ""
         echo "Actions:"
-        echo "  icmp_flood   — ICMP flood (hping3, 30s)"
-        echo "  port_scan    — SYN scan (nmap, top ${SCAN_PORTS}; set SCAN_PORTS=N to override)"
-        echo "  byte_flood   — Large-packet flood (hping3, 30s)"
-        echo "  full_demo    — Full scenario: normal → flood → scan → recovery"
+        echo "  icmp_flood     — ICMP flood (hping3, 30s)"
+        echo "  port_scan      — SYN scan (nmap, top ${SCAN_PORTS}; set SCAN_PORTS=N to override)"
+        echo "  byte_flood     — Large-packet flood (hping3, 30s)"
+        echo "  covert_channel — Alternating packet sizes (high variance → triggers RATE_LIMIT)"
+        echo "  atypical_proto — GRE IP Protocol 47 (triggers RATE_LIMIT)"
         echo ""
         echo "Example:"
         echo "  mininet> h1 bash attacks.sh icmp_flood 10.0.1.2"
-        echo "  mininet> h1 bash attacks.sh full_demo 10.0.1.2"
+        echo "  mininet> h1 bash attacks.sh covert_channel 10.0.1.2"
         ;;
 esac

@@ -23,6 +23,7 @@ except ImportError:
 
 RECOVERY_RATE = 0.08    # trust recovers gradually on benign traffic
 BASE          = 100.0   # starting trust
+ML_THRESHOLD  = -0.10   # decision score below this triggers ml_anomaly (outlier)
 
 # Thresholds tuned from YOUR data:
 #   - Normal ICMP pairs: ~18 pps  → flood threshold = 5× = 90 pps (conservative)
@@ -157,7 +158,7 @@ class TrustEngine:
 
                 # decision_function: negative = anomalous, positive = normal
                 ml_score = self._model.decision_function(vec)[0]
-                if ml_score < -0.26:
+                if ml_score < ML_THRESHOLD:
                     score -= 30
                     ml_label = f"ml_anomaly({ml_score:.3f})"
                     triggered.append(ml_label)
